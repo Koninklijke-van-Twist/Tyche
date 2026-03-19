@@ -3,6 +3,7 @@
  * Includes/requires
  */
 require __DIR__ . '/auth.php';
+require __DIR__ . '/logincheck.php';
 require __DIR__ . '/odata.php';
 
 /**
