@@ -828,9 +828,20 @@ try {
         }
 
         .status-filter {
+            width: auto;
+            min-height: 0;
+            padding: 0.16rem 0.52rem;
+            font-size: 0.78rem;
+            line-height: 1;
+            font-weight: 700;
             cursor: pointer;
             user-select: none;
             transition: opacity 120ms ease, filter 120ms ease;
+        }
+
+        .status-filter:hover {
+            transform: none;
+            box-shadow: none;
         }
 
         .status-filter:not(.active) {
@@ -1086,6 +1097,7 @@ try {
                                 <?php else: ?>
                                     <?php foreach ($directCustomerSummary as $summary): ?>
                                         <tr class="summary-clickable"
+                                            onclick="jumpToDirectSalesSummary(this)"
                                             data-jump-customer-no="<?php echo h((string) $summary['customer_no']); ?>"
                                             data-jump-customer-name="<?php echo h((string) $summary['customer_name']); ?>">
                                             <td><?php echo h($summary['customer_name']); ?></td>
@@ -1120,6 +1132,7 @@ try {
                                 <?php else: ?>
                                     <?php foreach ($projectTypeSummary as $summary): ?>
                                         <tr class="summary-clickable"
+                                            onclick="jumpToProjectSummary(this)"
                                             data-jump-project-type="<?php echo h((string) $summary['project_type']); ?>">
                                             <td><?php echo h($summary['project_type']); ?></td>
                                             <td><?php echo h((string) $summary['quotes']); ?></td>
@@ -1131,75 +1144,6 @@ try {
                         </table>
                     </div>
                 </article>
-            </section>
-
-            <section class="card section">
-                <h2>Opportunities</h2>
-                <div class="table-desc-inline">
-                    <p class="muted">Gefilterd op accountmanager en aanmaakdatumrange.</p>
-                    <div class="status-filter-group">
-                        <button type="button" class="chip warn status-filter active" data-filter-status="Open" onclick="toggleStatusFilter(this)">Open</button>
-                        <button type="button" class="chip ok status-filter active" data-filter-status="Gewonnen" onclick="toggleStatusFilter(this)">Gewonnen</button>
-                        <button type="button" class="chip bad status-filter active" data-filter-status="Verloren" onclick="toggleStatusFilter(this)">Verloren</button>
-                    </div>
-                </div>
-                <div class="table-wrap">
-                    <table id="opportunities-table">
-                        <thead>
-                            <tr>
-                                <th class="sortable" data-col="0">Offerte</th>
-                                <th class="sortable" data-col="1">Type</th>
-                                <th class="sortable" data-col="2">Klant</th>
-                                <th class="sortable" data-col="3">Opportunity #</th>
-                                <th class="sortable" data-col="4">Resultaat</th>
-                                <th class="sortable" data-col="5">Status</th>
-                                <th class="sortable" data-col="6" data-type="date">Aangemaakt</th>
-                                <th class="sortable" data-col="7" data-type="date">Verwachte sluitdatum</th>
-                                <th class="sortable" data-col="8" data-type="num">Omzet</th>
-                                <th class="sortable" data-col="9">Kosten</th>
-                                <th class="sortable" data-col="10">Marge</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php if ($opportunityRows === []): ?>
-                                <tr>
-                                    <td colspan="11" class="muted">Geen opportunities gevonden met deze filters.</td>
-                                </tr>
-                            <?php else: ?>
-                                <?php foreach ($opportunityRows as $row): ?>
-                                    <?php
-                                    $resultClass = 'warn';
-                                    if ($row['result'] === 'Gewonnen') {
-                                        $resultClass = 'ok';
-                                    } elseif ($row['result'] === 'Verloren') {
-                                        $resultClass = 'bad';
-                                    }
-                                    ?>
-                                    <tr class="row-<?php echo h($resultClass); ?>"
-                                        data-opportunity-result="<?php echo h($row['result']); ?>">
-                                        <td><?php echo h($row['quote_no'] !== '' ? $row['quote_no'] : '-'); ?></td>
-                                        <td><span class="chip"><?php echo h($row['offer_type']); ?></span></td>
-                                        <td><?php echo h($row['customer_name'] !== '' ? $row['customer_name'] : '-'); ?></td>
-                                        <td><?php echo h($row['opportunity_no']); ?></td>
-                                        <td><span
-                                                class="chip <?php echo h($resultClass); ?>"><?php echo h($row['result']); ?></span>
-                                        </td>
-                                        <td class="status-cell"><?php echo h($row['status'] !== '' ? $row['status'] : '-'); ?></td>
-                                        <td data-sort="<?php echo h($row['creation_date']); ?>">
-                                            <?php echo h($row['creation_date'] !== '' ? $row['creation_date'] : '-'); ?></td>
-                                        <td data-sort="<?php echo h($row['quote_valid_until']); ?>">
-                                            <?php echo h($row['quote_valid_until'] !== '' ? $row['quote_valid_until'] : '-'); ?>
-                                        </td>
-                                        <td data-sort="<?php echo h((string) $row['revenue']); ?>">EUR
-                                            <?php echo h(q($row['revenue'])); ?></td>
-                                        <td>-</td>
-                                        <td>-</td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
-                        </tbody>
-                    </table>
-                </div>
             </section>
 
             <section class="card section">
@@ -1283,6 +1227,77 @@ try {
                     </table>
                 </div>
             </section>
+
+            <section class="card section">
+                <h2>Opportunities</h2>
+                <div class="table-desc-inline">
+                    <p class="muted">Gefilterd op accountmanager en aanmaakdatumrange.</p>
+                    <div class="status-filter-group">
+                        <button type="button" class="chip warn status-filter active" data-filter-status="Open" onclick="toggleStatusFilter(this)">Open</button>
+                        <button type="button" class="chip ok status-filter active" data-filter-status="Gewonnen" onclick="toggleStatusFilter(this)">Gewonnen</button>
+                        <button type="button" class="chip bad status-filter active" data-filter-status="Verloren" onclick="toggleStatusFilter(this)">Verloren</button>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table id="opportunities-table">
+                        <thead>
+                            <tr>
+                                <th class="sortable" data-col="0">Offerte</th>
+                                <th class="sortable" data-col="1">Type</th>
+                                <th class="sortable" data-col="2">Klant</th>
+                                <th class="sortable" data-col="3">Opportunity #</th>
+                                <th class="sortable" data-col="4">Resultaat</th>
+                                <th class="sortable" data-col="5">Status</th>
+                                <th class="sortable" data-col="6" data-type="date">Aangemaakt</th>
+                                <th class="sortable" data-col="7" data-type="date">Verwachte sluitdatum</th>
+                                <th class="sortable" data-col="8" data-type="num">Omzet</th>
+                                <th class="sortable" data-col="9">Kosten</th>
+                                <th class="sortable" data-col="10">Marge</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if ($opportunityRows === []): ?>
+                                <tr>
+                                    <td colspan="11" class="muted">Geen opportunities gevonden met deze filters.</td>
+                                </tr>
+                            <?php else: ?>
+                                <?php foreach ($opportunityRows as $row): ?>
+                                    <?php
+                                    $resultClass = 'warn';
+                                    if ($row['result'] === 'Gewonnen') {
+                                        $resultClass = 'ok';
+                                    } elseif ($row['result'] === 'Verloren') {
+                                        $resultClass = 'bad';
+                                    }
+                                    ?>
+                                    <tr class="row-<?php echo h($resultClass); ?>"
+                                        data-opportunity-result="<?php echo h($row['result']); ?>">
+                                        <td><?php echo h($row['quote_no'] !== '' ? $row['quote_no'] : '-'); ?></td>
+                                        <td><span class="chip"><?php echo h($row['offer_type']); ?></span></td>
+                                        <td><?php echo h($row['customer_name'] !== '' ? $row['customer_name'] : '-'); ?></td>
+                                        <td><?php echo h($row['opportunity_no']); ?></td>
+                                        <td><span
+                                                class="chip <?php echo h($resultClass); ?>"><?php echo h($row['result']); ?></span>
+                                        </td>
+                                        <td class="status-cell"><?php echo h($row['status'] !== '' ? $row['status'] : '-'); ?></td>
+                                        <td data-sort="<?php echo h($row['creation_date']); ?>">
+                                            <?php echo h($row['creation_date'] !== '' ? $row['creation_date'] : '-'); ?></td>
+                                        <td data-sort="<?php echo h($row['quote_valid_until']); ?>">
+                                            <?php echo h($row['quote_valid_until'] !== '' ? $row['quote_valid_until'] : '-'); ?>
+                                        </td>
+                                        <td data-sort="<?php echo h((string) $row['revenue']); ?>">EUR
+                                            <?php echo h(q($row['revenue'])); ?></td>
+                                        <td>-</td>
+                                        <td>-</td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            
         <?php endif; ?>
     </main>
 
@@ -1386,6 +1401,154 @@ try {
             {
                 tycheApplyStatusFilterById(table.id);
             }
+        }
+
+        function tycheMoveOffersToTop(matchFn)
+        {
+            var offersTable = document.getElementById('offers-table');
+            if (!offersTable)
+            {
+                return;
+            }
+
+            var tbody = offersTable.querySelector('tbody');
+            if (!tbody)
+            {
+                return;
+            }
+
+            var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
+            var validRows = rows.filter(function (row)
+            {
+                var onlyCell = row.cells.length === 1 ? row.cells[0] : null;
+                return !(onlyCell && onlyCell.hasAttribute('colspan'));
+            });
+
+            var matched = [];
+            var rest = [];
+            validRows.forEach(function (row)
+            {
+                if (matchFn(row))
+                {
+                    matched.push(row);
+                }
+                else
+                {
+                    rest.push(row);
+                }
+            });
+
+            var orderedRows = matched.concat(rest);
+            var firstTops = new Map();
+            orderedRows.forEach(function (row)
+            {
+                firstTops.set(row, row.getBoundingClientRect().top);
+            });
+
+            orderedRows.forEach(function (row)
+            {
+                tbody.appendChild(row);
+            });
+
+            orderedRows.forEach(function (row)
+            {
+                var firstTop = firstTops.get(row);
+                var lastTop = row.getBoundingClientRect().top;
+                var deltaY = firstTop - lastTop;
+
+                row.style.transition = 'none';
+                row.style.transform = 'translateY(' + deltaY + 'px)';
+            });
+
+            void tbody.offsetHeight;
+
+            orderedRows.forEach(function (row)
+            {
+                row.style.transition = 'transform 420ms cubic-bezier(0.22, 1, 0.36, 1)';
+                row.style.transform = 'translateY(0)';
+                row.addEventListener('transitionend', function ()
+                {
+                    row.style.transition = '';
+                    row.style.transform = '';
+                }, { once: true });
+            });
+
+            rest.forEach(function (row, index)
+            {
+                row.classList.add('dimmed-temp');
+                if (row._dimmedTimer)
+                {
+                    clearTimeout(row._dimmedTimer);
+                }
+
+                row._dimmedTimer = setTimeout(function ()
+                {
+                    row.classList.remove('dimmed-temp');
+                    row._dimmedTimer = null;
+                }, 3000 + ((matched.length + index) * 100));
+            });
+
+            matched.forEach(function (row)
+            {
+                row.classList.remove('dimmed-temp');
+                if (row._dimmedTimer)
+                {
+                    clearTimeout(row._dimmedTimer);
+                    row._dimmedTimer = null;
+                }
+            });
+        }
+
+        function jumpToDirectSalesSummary(row)
+        {
+            if (!row)
+            {
+                return;
+            }
+
+            var customerNo = (row.getAttribute('data-jump-customer-no') || '').trim();
+            var customerName = (row.getAttribute('data-jump-customer-name') || '').trim().toLowerCase();
+
+            tycheMoveOffersToTop(function (offerRow)
+            {
+                var offerType = (offerRow.getAttribute('data-offer-type') || '').trim();
+                if (offerType !== 'Direct Sales')
+                {
+                    return false;
+                }
+
+                var offerCustomerNo = (offerRow.getAttribute('data-customer-no') || '').trim();
+                var offerCustomerName = (offerRow.getAttribute('data-customer-name') || '').trim().toLowerCase();
+
+                if (customerNo !== '')
+                {
+                    return offerCustomerNo === customerNo;
+                }
+
+                return offerCustomerName === customerName;
+            });
+        }
+
+        function jumpToProjectSummary(row)
+        {
+            if (!row)
+            {
+                return;
+            }
+
+            var projectType = (row.getAttribute('data-jump-project-type') || '').trim().toLowerCase();
+
+            tycheMoveOffersToTop(function (offerRow)
+            {
+                var offerType = (offerRow.getAttribute('data-offer-type') || '').trim();
+                if (offerType !== 'Project')
+                {
+                    return false;
+                }
+
+                var offerProjectType = (offerRow.getAttribute('data-project-type') || '').trim().toLowerCase();
+                return offerProjectType === projectType;
+            });
         }
 
         document.addEventListener('DOMContentLoaded', function ()
@@ -1558,7 +1721,7 @@ try {
 
             function moveMatchesToTop (matchFn)
             {
-                var offersTable = document.getElementById('opportunities-table');
+                var offersTable = document.getElementById('offers-table');
                 if (!offersTable)
                 {
                     return;
@@ -1604,12 +1767,23 @@ try {
                 setTemporaryDimmed(rest, 3000, matched.length);
             }
 
-            document.querySelectorAll('tr[data-jump-customer-name]').forEach(function (row)
+            document.addEventListener('click', function (event)
             {
-                row.addEventListener('click', function ()
+                var node = event.target;
+                while (node && node !== document && node.tagName !== 'TR')
                 {
-                    var customerNo = (row.getAttribute('data-jump-customer-no') || '').trim();
-                    var customerName = (row.getAttribute('data-jump-customer-name') || '').trim().toLowerCase();
+                    node = node.parentNode;
+                }
+
+                if (!node || node === document)
+                {
+                    return;
+                }
+
+                if (node.hasAttribute('data-jump-customer-name'))
+                {
+                    var customerNo = (node.getAttribute('data-jump-customer-no') || '').trim();
+                    var customerName = (node.getAttribute('data-jump-customer-name') || '').trim().toLowerCase();
 
                     moveMatchesToTop(function (offerRow)
                     {
@@ -1628,14 +1802,12 @@ try {
                         }
                         return offerCustomerName === customerName;
                     });
-                });
-            });
+                    return;
+                }
 
-            document.querySelectorAll('tr[data-jump-project-type]').forEach(function (row)
-            {
-                row.addEventListener('click', function ()
+                if (node.hasAttribute('data-jump-project-type'))
                 {
-                    var projectType = (row.getAttribute('data-jump-project-type') || '').trim().toLowerCase();
+                    var projectType = (node.getAttribute('data-jump-project-type') || '').trim().toLowerCase();
 
                     moveMatchesToTop(function (offerRow)
                     {
@@ -1648,7 +1820,7 @@ try {
                         var offerProjectType = (offerRow.getAttribute('data-project-type') || '').trim().toLowerCase();
                         return offerProjectType === projectType;
                     });
-                });
+                }
             });
 
             document.querySelectorAll('table').forEach(function (table)
