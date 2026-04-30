@@ -25,6 +25,7 @@ const ENTITY_SALES_OPPORTUNITIES = 'SalesOpportunitiesPage';
 $errorMessage = '';
 $selectedSalesperson = trim((string) ($_GET['salesperson'] ?? ''));
 $selectedOfferType = trim((string) ($_GET['offer_type'] ?? 'all'));
+$selectedTab = trim((string) ($_GET['tab'] ?? 'offertes'));
 
 $today = new DateTimeImmutable('today');
 $defaultDateFrom = $today->modify('first day of this month')->format('Y-m-d');
@@ -37,6 +38,10 @@ if (!in_array($selectedOfferType, ['all', 'direct', 'project'], true)) {
     $selectedOfferType = 'all';
 }
 
+if (!in_array($selectedTab, ['offertes', 'opportunities'], true)) {
+    $selectedTab = 'offertes';
+}
+
 $salespersons = [];
 $selectedSalespersonName = '';
 $selectedDepartmentCode = '';
@@ -44,6 +49,7 @@ $selectedDepartmentName = '';
 $selectedDepartmentDimensionCode = '';
 $rows = [];
 $opportunityRows = [];
+$opportunityCustomerSummary = [];
 $directCustomerSummary = [];
 $projectTypeSummary = [];
 $totals = [
@@ -238,6 +244,19 @@ function detect_result_status(array $quote, array $salesDocumentsByQuote, array 
     return 'Open';
 }
 
+function build_tab_url(string $tab): string
+{
+    $allowedTabs = ['offertes', 'opportunities'];
+    if (!in_array($tab, $allowedTabs, true)) {
+        $tab = 'offertes';
+    }
+
+    $query = $_GET;
+    $query['tab'] = $tab;
+
+    return 'index.php?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986);
+}
+
 /**
  * Page load
  */
@@ -401,6 +420,17 @@ try {
                 'status' => $statusText,
                 'revenue' => $revenue,
             ];
+
+            $opportunityCustomerKey = $customerName !== '' ? $customerName : '(onbekende klant)';
+            if (!isset($opportunityCustomerSummary[$opportunityCustomerKey])) {
+                $opportunityCustomerSummary[$opportunityCustomerKey] = [
+                    'customer_name' => $opportunityCustomerKey,
+                    'opportunities' => 0,
+                    'revenue' => 0.0,
+                ];
+            }
+            $opportunityCustomerSummary[$opportunityCustomerKey]['opportunities']++;
+            $opportunityCustomerSummary[$opportunityCustomerKey]['revenue'] += $revenue;
 
             $opportunityTotals['count']++;
             $opportunityTotals['revenue'] += $revenue;
@@ -635,6 +665,10 @@ try {
         uasort($projectTypeSummary, static function (array $a, array $b): int {
             return $b['quotes'] <=> $a['quotes'];
         });
+
+        uasort($opportunityCustomerSummary, static function (array $a, array $b): int {
+            return $b['revenue'] <=> $a['revenue'];
+        });
     }
 } catch (Throwable $e) {
     $errorMessage = $e->getMessage();
@@ -665,6 +699,16 @@ try {
             --line: #d3dfd2;
             --accent: #1f6f4a;
             --accent-2: #114c32;
+        }
+
+        .theme-opportunities {
+            --bg-a: #f1f6ff;
+            --bg-b: #dbe8f8;
+            --ink: #152033;
+            --ink-soft: #4b5a6f;
+            --line: #d3deef;
+            --accent: #1f4a6f;
+            --accent-2: #11324c;
         }
 
         * {
@@ -808,6 +852,33 @@ try {
             font-size: 0.8rem;
             line-height: 1;
             border-radius: 999px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin: 1rem 0 0.8rem;
+            flex-wrap: wrap;
+        }
+
+        .tab-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 36px;
+            padding: 0.35rem 0.9rem;
+            border-radius: 999px;
+            border: 1px solid #a7c1af;
+            color: var(--ink);
+            text-decoration: none;
+            font-weight: 700;
+            background: #edf4ee;
+        }
+
+        .tab-link.active {
+            color: #fff;
+            border-color: transparent;
+            background: linear-gradient(180deg, var(--accent), var(--accent-2));
         }
 
         .table-wrap {
@@ -972,6 +1043,25 @@ try {
             background: #eef6ef;
         }
 
+        .theme-opportunities .summary-clickable:hover {
+            background: #eef2f8;
+        }
+
+        .theme-opportunities th {
+            background: #f2f7fd;
+        }
+
+        .theme-opportunities .tab-link {
+            background: #e8f0fb;
+            border-color: #b8cbe5;
+        }
+
+        .theme-opportunities .tab-link.active {
+            color: #fff;
+            border-color: transparent;
+            background: linear-gradient(180deg, var(--accent), var(--accent-2));
+        }
+
         #offers-table tbody tr>td {
             transition: filter 2200ms cubic-bezier(0.16, 1, 0.3, 1), opacity 2200ms cubic-bezier(0.16, 1, 0.3, 1);
             will-change: filter, opacity;
@@ -987,6 +1077,24 @@ try {
         }
 
         #offers-table tbody tr.dimmed-temp {
+            filter: grayscale(1);
+        }
+
+        #opportunities-table tbody tr>td {
+            transition: filter 2200ms cubic-bezier(0.16, 1, 0.3, 1), opacity 2200ms cubic-bezier(0.16, 1, 0.3, 1);
+            will-change: filter, opacity;
+        }
+
+        #opportunities-table tbody tr {
+            transition: filter 2200ms cubic-bezier(0.16, 1, 0.3, 1);
+            will-change: filter;
+        }
+
+        #opportunities-table tbody tr.dimmed-temp>td {
+            opacity: 0.52;
+        }
+
+        #opportunities-table tbody tr.dimmed-temp {
             filter: grayscale(1);
         }
 
@@ -1019,7 +1127,7 @@ try {
     </style>
 </head>
 
-<body>
+<body class="<?php echo $selectedTab === 'opportunities' ? 'theme-opportunities' : ''; ?>">
     <main class="page">
         <section class="card header">
             <h1>Offertes per accountmanager</h1>
@@ -1071,24 +1179,6 @@ try {
         </form>
 
         <?php if ($selectedSalesperson !== '' && $errorMessage === ''): ?>
-            <section class="stats">
-                <article class="card stat">
-                    <p class="k">Aantal offertes</p>
-                    <p class="v"><?php echo h((string) $totals['count']); ?></p>
-                </article>
-                <article class="card stat">
-                    <p class="k">Omzet (opbrengst)</p>
-                    <p class="v">EUR <?php echo h(q($totals['revenue'])); ?></p>
-                </article>
-                <article class="card stat">
-                    <p class="k">Kosten</p>
-                    <p class="v">EUR <?php echo h(q($totals['cost'])); ?></p>
-                </article>
-                <article class="card stat">
-                    <p class="k">Marge</p>
-                    <p class="v">EUR <?php echo h(q($totals['profit'])); ?></p>
-                </article>
-            </section>
 
             <section class="card section" style="margin-bottom: 1rem;">
                 <h2>Geselecteerde accountmanager</h2>
@@ -1115,264 +1205,328 @@ try {
                 </p>
             </section>
 
-            <section class="grid-2">
-                <article class="card section">
-                    <h2>Direct Sales per klant</h2>
+            <nav class="tabs" aria-label="Tabel tabs">
+                <a class="tab-link <?php echo $selectedTab === 'offertes' ? 'active' : ''; ?>" href="<?php echo h(build_tab_url('offertes')); ?>">Offertes</a>
+                <a class="tab-link <?php echo $selectedTab === 'opportunities' ? 'active' : ''; ?>" href="<?php echo h(build_tab_url('opportunities')); ?>">Opportunities</a>
+            </nav>
+
+            <?php if ($selectedTab === 'offertes'): ?>
+                <section class="stats">
+                    <article class="card stat">
+                        <p class="k">Aantal offertes</p>
+                        <p class="v"><?php echo h((string) $totals['count']); ?></p>
+                    </article>
+                    <article class="card stat">
+                        <p class="k">Omzet (opbrengst)</p>
+                        <p class="v">EUR <?php echo h(q($totals['revenue'])); ?></p>
+                    </article>
+                    <article class="card stat">
+                        <p class="k">Kosten</p>
+                        <p class="v">EUR <?php echo h(q($totals['cost'])); ?></p>
+                    </article>
+                    <article class="card stat">
+                        <p class="k">Marge</p>
+                        <p class="v">EUR <?php echo h(q($totals['profit'])); ?></p>
+                    </article>
+                </section>
+
+                <section class="grid-2">
+                    <article class="card section">
+                        <h2>Direct Sales per klant</h2>
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Klant</th>
+                                        <th>Offertes</th>
+                                        <th>Omzet</th>
+                                        <th>Kosten</th>
+                                        <th>Marge</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if ($directCustomerSummary === []): ?>
+                                        <tr>
+                                            <td colspan="5" class="muted">Geen Direct Sales gevonden voor deze selectie.</td>
+                                        </tr>
+                                    <?php else: ?>
+                                        <?php foreach ($directCustomerSummary as $summary): ?>
+                                            <tr class="summary-clickable" onclick="jumpToDirectSalesSummary(this, event)"
+                                                data-jump-customer-no="<?php echo h((string) $summary['customer_no']); ?>"
+                                                data-jump-customer-name="<?php echo h((string) $summary['customer_name']); ?>">
+                                                <td><?php echo h($summary['customer_name']); ?></td>
+                                                <td><?php echo h((string) $summary['quotes']); ?></td>
+                                                <td>EUR <?php echo h(q($summary['revenue'])); ?></td>
+                                                <td>EUR <?php echo h(q($summary['cost'])); ?></td>
+                                                <td>EUR <?php echo h(q($summary['profit'])); ?></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </article>
+
+                    <article class="card section">
+                        <h2>Projecten per projectsoort</h2>
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Projectsoort</th>
+                                        <th>Offertes</th>
+                                        <th>Omzet</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if ($projectTypeSummary === []): ?>
+                                        <tr>
+                                            <td colspan="3" class="muted">Geen projectoffertes gevonden voor deze selectie.</td>
+                                        </tr>
+                                    <?php else: ?>
+                                        <?php foreach ($projectTypeSummary as $summary): ?>
+                                            <tr class="summary-clickable" onclick="jumpToProjectSummary(this, event)"
+                                                data-jump-project-type="<?php echo h((string) $summary['project_type']); ?>">
+                                                <td><?php echo h($summary['project_type']); ?></td>
+                                                <td><?php echo h((string) $summary['quotes']); ?></td>
+                                                <td>EUR <?php echo h(q($summary['revenue'])); ?></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </article>
+                </section>
+
+                <section class="card section">
+                    <div class="section-title-row">
+                        <h2>Offertes</h2>
+                        <button type="button" class="table-toggle-btn"
+                            onclick="toggleTableSection(this, 'offers-table')">Inklappen</button>
+                    </div>
+                    <div class="table-desc-inline">
+                        <p class="muted">Klik op een regel in de twee samenvattingen hierboven om die klant of projectsoort
+                            bovenaan te zetten.</p>
+                        <div class="status-filter-group">
+                            <button type="button" class="chip warn status-filter active" data-filter-status="Open"
+                                onclick="toggleStatusFilter(this)">Open</button>
+                            <button type="button" class="chip ok status-filter active" data-filter-status="Gewonnen"
+                                onclick="toggleStatusFilter(this)">Gewonnen</button>
+                            <button type="button" class="chip bad status-filter active" data-filter-status="Verloren"
+                                onclick="toggleStatusFilter(this)">Verloren</button>
+                        </div>
+                    </div>
                     <div class="table-wrap">
-                        <table>
+                        <table id="offers-table">
+                            <thead>
+                                <tr>
+                                    <th class="sortable" data-col="0">Offerte</th>
+                                    <th class="sortable" data-col="1">Type</th>
+                                    <th class="sortable" data-col="2">Klant</th>
+                                    <th class="sortable" data-col="3">Opportunity #</th>
+                                    <th class="sortable" data-col="4">Projectsoort</th>
+                                    <th class="sortable" data-col="5">Resultaat</th>
+                                    <th class="sortable" data-col="6">Status</th>
+                                    <th class="sortable" data-col="7" data-type="date">Geldig t/m</th>
+                                    <th class="sortable" data-col="8" data-type="num">Omzet</th>
+                                    <th class="sortable" data-col="9" data-type="num">Kosten</th>
+                                    <th class="sortable" data-col="10" data-type="num">Marge</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php if ($rows === []): ?>
+                                    <tr>
+                                        <td colspan="11" class="muted">Geen offertes gevonden met deze filters.</td>
+                                    </tr>
+                                <?php else: ?>
+                                    <?php foreach ($rows as $row): ?>
+                                        <?php
+                                        $resultClass = 'warn';
+                                        if ($row['result'] === 'Gewonnen') {
+                                            $resultClass = 'ok';
+                                        } elseif ($row['result'] === 'Verloren') {
+                                            $resultClass = 'bad';
+                                        }
+                                        $typeClass = $row['offer_type'] === 'Project' ? 'project' : 'direct';
+                                        ?>
+                                        <tr class="row-<?php echo h($resultClass); ?>"
+                                            data-offer-result="<?php echo h($row['result']); ?>"
+                                            data-offer-type="<?php echo h($row['offer_type']); ?>"
+                                            data-customer-no="<?php echo h($row['customer_no']); ?>"
+                                            data-customer-name="<?php echo h($row['customer_name']); ?>"
+                                            data-project-type="<?php echo h($row['project_type']); ?>">
+                                            <td><?php echo h($row['quote_no']); ?></td>
+                                            <td><span
+                                                    class="chip <?php echo h($typeClass); ?>"><?php echo h($row['offer_type']); ?></span>
+                                            </td>
+                                            <td><?php echo h($row['customer_name']); ?></td>
+                                            <td><?php echo h($row['offer_type'] === 'Project' ? ($row['opportunity_no'] !== '' ? $row['opportunity_no'] : '-') : '-'); ?>
+                                            </td>
+                                            <td><?php echo h($row['offer_type'] === 'Project' ? ($row['project_type'] !== '' ? $row['project_type'] : 'Onbekend') : '-'); ?>
+                                            </td>
+                                            <td><span
+                                                    class="chip <?php echo h($resultClass); ?>"><?php echo h($row['result']); ?></span>
+                                            </td>
+                                            <td class="status-cell">
+                                                <?php echo h(trim($row['status'] . ' ' . $row['document_status'])); ?></td>
+                                            <td data-sort="<?php echo h($row['quote_valid_until']); ?>">
+                                                <?php echo h($row['quote_valid_until'] !== '' ? $row['quote_valid_until'] : '-'); ?>
+                                            </td>
+                                            <td data-sort="<?php echo h((string) $row['revenue']); ?>">EUR
+                                                <?php echo h(q($row['revenue'])); ?>
+                                            </td>
+                                            <td data-sort="<?php echo h((string) $row['cost']); ?>">EUR
+                                                <?php echo h(q($row['cost'])); ?>
+                                            </td>
+                                            <td data-sort="<?php echo h((string) $row['profit']); ?>">EUR
+                                                <?php echo h(q($row['profit'])); ?>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            <?php endif; ?>
+
+            <?php if ($selectedTab === 'opportunities'): ?>
+                <section class="card section">
+                    <div class="section-title-row">
+                        <h2>Opportunities per klant</h2>
+                        <button type="button" class="table-toggle-btn"
+                            onclick="toggleTableSection(this, 'opportunities-summary-table')">Uitklappen</button>
+                    </div>
+                    <div class="table-wrap" style="display: none;">
+                        <table id="opportunities-summary-table">
                             <thead>
                                 <tr>
                                     <th>Klant</th>
-                                    <th>Offertes</th>
+                                    <th>Kansen</th>
                                     <th>Omzet</th>
-                                    <th>Kosten</th>
-                                    <th>Marge</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php if ($directCustomerSummary === []): ?>
+                                <?php if ($opportunityCustomerSummary === []): ?>
                                     <tr>
-                                        <td colspan="5" class="muted">Geen Direct Sales gevonden voor deze selectie.</td>
+                                        <td colspan="3" class="muted">Geen opportunities per klant gevonden voor deze selectie.</td>
                                     </tr>
                                 <?php else: ?>
-                                    <?php foreach ($directCustomerSummary as $summary): ?>
-                                        <tr class="summary-clickable" onclick="jumpToDirectSalesSummary(this)"
-                                            data-jump-customer-no="<?php echo h((string) $summary['customer_no']); ?>"
-                                            data-jump-customer-name="<?php echo h((string) $summary['customer_name']); ?>">
+                                    <?php foreach ($opportunityCustomerSummary as $summary): ?>
+                                        <tr class="summary-clickable" onclick="jumpToOpportunityCustomerSummary(this, event)"
+                                            data-jump-opportunity-customer-name="<?php echo h((string) $summary['customer_name']); ?>">
                                             <td><?php echo h($summary['customer_name']); ?></td>
-                                            <td><?php echo h((string) $summary['quotes']); ?></td>
+                                            <td><?php echo h((string) $summary['opportunities']); ?></td>
                                             <td>EUR <?php echo h(q($summary['revenue'])); ?></td>
-                                            <td>EUR <?php echo h(q($summary['cost'])); ?></td>
-                                            <td>EUR <?php echo h(q($summary['profit'])); ?></td>
                                         </tr>
                                     <?php endforeach; ?>
                                 <?php endif; ?>
                             </tbody>
                         </table>
                     </div>
-                </article>
+                </section>
 
-                <article class="card section">
-                    <h2>Projecten per projectsoort</h2>
+                <section class="stats" style="margin-top: 1rem; margin-bottom: 1rem;">
+                    <?php
+                    $closedDecidedTotal = $opportunityTotals['won_count'] + $opportunityTotals['lost_count'];
+                    $wonPct = $closedDecidedTotal > 0 ? (100.0 * $opportunityTotals['won_count'] / $closedDecidedTotal) : null;
+                    ?>
+                    <article class="card stat">
+                        <p class="k">Aantal kansen</p>
+                        <p class="v"><?php echo h((string) $opportunityTotals['count']); ?></p>
+                    </article>
+                    <article class="card stat">
+                        <p class="k">Omzet</p>
+                        <p class="v">EUR <?php echo h(q($opportunityTotals['revenue'])); ?></p>
+                    </article>
+                    <article class="card stat">
+                        <p class="k">% Gewonnen (vs verloren)</p>
+                        <p class="v"><?php echo $wonPct === null ? '-' : h(number_format($wonPct, 1, ',', '.')) . '%'; ?></p>
+                    </article>
+                    <article class="card stat">
+                        <p class="k">Aantal openstaand</p>
+                        <p class="v"><?php echo h((string) $opportunityTotals['open_count']); ?></p>
+                    </article>
+                </section>
+
+                <section class="card section">
+                    <div class="section-title-row">
+                        <h2>Opportunities</h2>
+                        <button type="button" class="table-toggle-btn"
+                            onclick="toggleTableSection(this, 'opportunities-table')">Inklappen</button>
+                    </div>
+                    <div class="table-desc-inline">
+                        <p class="muted">Gefilterd op accountmanager en aanmaakdatumrange.</p>
+                        <div class="status-filter-group">
+                            <button type="button" class="chip warn status-filter active" data-filter-status="Open"
+                                onclick="toggleStatusFilter(this)">Open</button>
+                            <button type="button" class="chip ok status-filter active" data-filter-status="Gewonnen"
+                                onclick="toggleStatusFilter(this)">Gewonnen</button>
+                            <button type="button" class="chip bad status-filter active" data-filter-status="Verloren"
+                                onclick="toggleStatusFilter(this)">Verloren</button>
+                        </div>
+                    </div>
                     <div class="table-wrap">
-                        <table>
+                        <table id="opportunities-table">
                             <thead>
                                 <tr>
-                                    <th>Projectsoort</th>
-                                    <th>Offertes</th>
-                                    <th>Omzet</th>
+                                    <th class="sortable" data-col="0">Opportunity #</th>
+                                    <th class="sortable" data-col="1">Type</th>
+                                    <th class="sortable" data-col="2">Klant</th>
+                                    <th class="sortable" data-col="3">Resultaat</th>
+                                    <th class="sortable" data-col="4">Status</th>
+                                    <th class="sortable" data-col="5" data-type="date">Aangemaakt</th>
+                                    <th class="sortable" data-col="6" data-type="date">Verwachte sluitdatum</th>
+                                    <th class="sortable" data-col="7" data-type="num">Omzet</th>
+                                    <th class="sortable" data-col="8" data-type="num">Kosten</th>
+                                    <th class="sortable" data-col="9" data-type="num">Marge</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php if ($projectTypeSummary === []): ?>
+                                <?php if ($opportunityRows === []): ?>
                                     <tr>
-                                        <td colspan="3" class="muted">Geen projectoffertes gevonden voor deze selectie.</td>
+                                        <td colspan="10" class="muted">Geen opportunities gevonden met deze filters.</td>
                                     </tr>
                                 <?php else: ?>
-                                    <?php foreach ($projectTypeSummary as $summary): ?>
-                                        <tr class="summary-clickable" onclick="jumpToProjectSummary(this)"
-                                            data-jump-project-type="<?php echo h((string) $summary['project_type']); ?>">
-                                            <td><?php echo h($summary['project_type']); ?></td>
-                                            <td><?php echo h((string) $summary['quotes']); ?></td>
-                                            <td>EUR <?php echo h(q($summary['revenue'])); ?></td>
+                                    <?php foreach ($opportunityRows as $row): ?>
+                                        <?php
+                                        $resultClass = 'warn';
+                                        if ($row['result'] === 'Gewonnen') {
+                                            $resultClass = 'ok';
+                                        } elseif ($row['result'] === 'Verloren') {
+                                            $resultClass = 'bad';
+                                        }
+                                        ?>
+                                        <tr class="row-<?php echo h($resultClass); ?>"
+                                            data-opportunity-result="<?php echo h($row['result']); ?>"
+                                            data-customer-name="<?php echo h($row['customer_name']); ?>">
+                                            <td><?php echo h($row['opportunity_no']); ?></td>
+                                            <td><span class="chip"><?php echo h($row['offer_type']); ?></span></td>
+                                            <td><?php echo h($row['customer_name'] !== '' ? $row['customer_name'] : '-'); ?></td>
+                                            <td><span
+                                                    class="chip <?php echo h($resultClass); ?>"><?php echo h($row['result']); ?></span>
+                                            </td>
+                                            <td class="status-cell"><?php echo h($row['status'] !== '' ? $row['status'] : '-'); ?></td>
+                                            <td data-sort="<?php echo h($row['creation_date']); ?>">
+                                                <?php echo h($row['creation_date'] !== '' ? $row['creation_date'] : '-'); ?>
+                                            </td>
+                                            <td data-sort="<?php echo h($row['quote_valid_until']); ?>">
+                                                <?php echo h($row['quote_valid_until'] !== '' ? $row['quote_valid_until'] : '-'); ?>
+                                            </td>
+                                            <td data-sort="<?php echo h((string) $row['revenue']); ?>">EUR
+                                                <?php echo h(q($row['revenue'])); ?>
+                                            </td>
+                                            <td>-</td>
+                                            <td>-</td>
                                         </tr>
                                     <?php endforeach; ?>
                                 <?php endif; ?>
                             </tbody>
                         </table>
                     </div>
-                </article>
-            </section>
-
-            <section class="card section">
-                <div class="section-title-row">
-                    <h2>Offertes</h2>
-                    <button type="button" class="table-toggle-btn"
-                        onclick="toggleTableSection(this, 'offers-table')">Inklappen</button>
-                </div>
-                <div class="table-desc-inline">
-                    <p class="muted">Klik op een regel in de twee samenvattingen hierboven om die klant of projectsoort
-                        bovenaan te zetten.</p>
-                    <div class="status-filter-group">
-                        <button type="button" class="chip warn status-filter active" data-filter-status="Open"
-                            onclick="toggleStatusFilter(this)">Open</button>
-                        <button type="button" class="chip ok status-filter active" data-filter-status="Gewonnen"
-                            onclick="toggleStatusFilter(this)">Gewonnen</button>
-                        <button type="button" class="chip bad status-filter active" data-filter-status="Verloren"
-                            onclick="toggleStatusFilter(this)">Verloren</button>
-                    </div>
-                </div>
-                <div class="table-wrap">
-                    <table id="offers-table">
-                        <thead>
-                            <tr>
-                                <th class="sortable" data-col="0">Offerte</th>
-                                <th class="sortable" data-col="1">Type</th>
-                                <th class="sortable" data-col="2">Klant</th>
-                                <th class="sortable" data-col="3">Opportunity #</th>
-                                <th class="sortable" data-col="4">Projectsoort</th>
-                                <th class="sortable" data-col="5">Resultaat</th>
-                                <th class="sortable" data-col="6">Status</th>
-                                <th class="sortable" data-col="7" data-type="date">Geldig t/m</th>
-                                <th class="sortable" data-col="8" data-type="num">Omzet</th>
-                                <th class="sortable" data-col="9" data-type="num">Kosten</th>
-                                <th class="sortable" data-col="10" data-type="num">Marge</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php if ($rows === []): ?>
-                                <tr>
-                                    <td colspan="11" class="muted">Geen offertes gevonden met deze filters.</td>
-                                </tr>
-                            <?php else: ?>
-                                <?php foreach ($rows as $row): ?>
-                                    <?php
-                                    $resultClass = 'warn';
-                                    if ($row['result'] === 'Gewonnen') {
-                                        $resultClass = 'ok';
-                                    } elseif ($row['result'] === 'Verloren') {
-                                        $resultClass = 'bad';
-                                    }
-                                    $typeClass = $row['offer_type'] === 'Project' ? 'project' : 'direct';
-                                    ?>
-                                    <tr class="row-<?php echo h($resultClass); ?>"
-                                        data-offer-result="<?php echo h($row['result']); ?>"
-                                        data-offer-type="<?php echo h($row['offer_type']); ?>"
-                                        data-customer-no="<?php echo h($row['customer_no']); ?>"
-                                        data-customer-name="<?php echo h($row['customer_name']); ?>"
-                                        data-project-type="<?php echo h($row['project_type']); ?>">
-                                        <td><?php echo h($row['quote_no']); ?></td>
-                                        <td><span
-                                                class="chip <?php echo h($typeClass); ?>"><?php echo h($row['offer_type']); ?></span>
-                                        </td>
-                                        <td><?php echo h($row['customer_name']); ?></td>
-                                        <td><?php echo h($row['offer_type'] === 'Project' ? ($row['opportunity_no'] !== '' ? $row['opportunity_no'] : '-') : '-'); ?>
-                                        </td>
-                                        <td><?php echo h($row['offer_type'] === 'Project' ? ($row['project_type'] !== '' ? $row['project_type'] : 'Onbekend') : '-'); ?>
-                                        </td>
-                                        <td><span
-                                                class="chip <?php echo h($resultClass); ?>"><?php echo h($row['result']); ?></span>
-                                        </td>
-                                        <td class="status-cell">
-                                            <?php echo h(trim($row['status'] . ' ' . $row['document_status'])); ?></td>
-                                        <td data-sort="<?php echo h($row['quote_valid_until']); ?>">
-                                            <?php echo h($row['quote_valid_until'] !== '' ? $row['quote_valid_until'] : '-'); ?>
-                                        </td>
-                                        <td data-sort="<?php echo h((string) $row['revenue']); ?>">EUR
-                                            <?php echo h(q($row['revenue'])); ?>
-                                        </td>
-                                        <td data-sort="<?php echo h((string) $row['cost']); ?>">EUR
-                                            <?php echo h(q($row['cost'])); ?>
-                                        </td>
-                                        <td data-sort="<?php echo h((string) $row['profit']); ?>">EUR
-                                            <?php echo h(q($row['profit'])); ?>
-                                        </td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-
-            <section class="stats" style="margin-top: 1rem; margin-bottom: 1rem;">
-                <?php
-                $closedDecidedTotal = $opportunityTotals['won_count'] + $opportunityTotals['lost_count'];
-                $wonPct = $closedDecidedTotal > 0 ? (100.0 * $opportunityTotals['won_count'] / $closedDecidedTotal) : null;
-                ?>
-                <article class="card stat">
-                    <p class="k">Aantal kansen</p>
-                    <p class="v"><?php echo h((string) $opportunityTotals['count']); ?></p>
-                </article>
-                <article class="card stat">
-                    <p class="k">Omzet</p>
-                    <p class="v">EUR <?php echo h(q($opportunityTotals['revenue'])); ?></p>
-                </article>
-                <article class="card stat">
-                    <p class="k">% Gewonnen (vs verloren)</p>
-                    <p class="v"><?php echo $wonPct === null ? '-' : h(number_format($wonPct, 1, ',', '.')) . '%'; ?></p>
-                </article>
-                <article class="card stat">
-                    <p class="k">Aantal openstaand</p>
-                    <p class="v"><?php echo h((string) $opportunityTotals['open_count']); ?></p>
-                </article>
-            </section>
-
-            <section class="card section">
-                <div class="section-title-row">
-                    <h2>Opportunities</h2>
-                    <button type="button" class="table-toggle-btn"
-                        onclick="toggleTableSection(this, 'opportunities-table')">Inklappen</button>
-                </div>
-                <div class="table-desc-inline">
-                    <p class="muted">Gefilterd op accountmanager en aanmaakdatumrange.</p>
-                    <div class="status-filter-group">
-                        <button type="button" class="chip warn status-filter active" data-filter-status="Open"
-                            onclick="toggleStatusFilter(this)">Open</button>
-                        <button type="button" class="chip ok status-filter active" data-filter-status="Gewonnen"
-                            onclick="toggleStatusFilter(this)">Gewonnen</button>
-                        <button type="button" class="chip bad status-filter active" data-filter-status="Verloren"
-                            onclick="toggleStatusFilter(this)">Verloren</button>
-                    </div>
-                </div>
-                <div class="table-wrap">
-                    <table id="opportunities-table">
-                        <thead>
-                            <tr>
-                                <th class="sortable" data-col="0">Opportunity #</th>
-                                <th class="sortable" data-col="1">Type</th>
-                                <th class="sortable" data-col="2">Klant</th>
-                                <th class="sortable" data-col="3">Resultaat</th>
-                                <th class="sortable" data-col="4">Status</th>
-                                <th class="sortable" data-col="5" data-type="date">Aangemaakt</th>
-                                <th class="sortable" data-col="6" data-type="date">Verwachte sluitdatum</th>
-                                <th class="sortable" data-col="7" data-type="num">Omzet</th>
-                                <th class="sortable" data-col="8" data-type="num">Kosten</th>
-                                <th class="sortable" data-col="9" data-type="num">Marge</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php if ($opportunityRows === []): ?>
-                                <tr>
-                                    <td colspan="10" class="muted">Geen opportunities gevonden met deze filters.</td>
-                                </tr>
-                            <?php else: ?>
-                                <?php foreach ($opportunityRows as $row): ?>
-                                    <?php
-                                    $resultClass = 'warn';
-                                    if ($row['result'] === 'Gewonnen') {
-                                        $resultClass = 'ok';
-                                    } elseif ($row['result'] === 'Verloren') {
-                                        $resultClass = 'bad';
-                                    }
-                                    ?>
-                                    <tr class="row-<?php echo h($resultClass); ?>"
-                                        data-opportunity-result="<?php echo h($row['result']); ?>">
-                                        <td><?php echo h($row['opportunity_no']); ?></td>
-                                        <td><span class="chip"><?php echo h($row['offer_type']); ?></span></td>
-                                        <td><?php echo h($row['customer_name'] !== '' ? $row['customer_name'] : '-'); ?></td>
-                                        <td><span
-                                                class="chip <?php echo h($resultClass); ?>"><?php echo h($row['result']); ?></span>
-                                        </td>
-                                        <td class="status-cell"><?php echo h($row['status'] !== '' ? $row['status'] : '-'); ?></td>
-                                        <td data-sort="<?php echo h($row['creation_date']); ?>">
-                                            <?php echo h($row['creation_date'] !== '' ? $row['creation_date'] : '-'); ?>
-                                        </td>
-                                        <td data-sort="<?php echo h($row['quote_valid_until']); ?>">
-                                            <?php echo h($row['quote_valid_until'] !== '' ? $row['quote_valid_until'] : '-'); ?>
-                                        </td>
-                                        <td data-sort="<?php echo h((string) $row['revenue']); ?>">EUR
-                                            <?php echo h(q($row['revenue'])); ?>
-                                        </td>
-                                        <td>-</td>
-                                        <td>-</td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </section>
+                </section>
+            <?php endif; ?>
 
 
         <?php endif; ?>
@@ -1499,15 +1653,15 @@ try {
             button.textContent = isHidden ? 'Inklappen' : 'Uitklappen';
         }
 
-        function tycheMoveOffersToTop (matchFn)
+        function tycheMoveRowsToTop (tableId, matchFn)
         {
-            var offersTable = document.getElementById('offers-table');
-            if (!offersTable)
+            var table = document.getElementById(tableId);
+            if (!table)
             {
                 return;
             }
 
-            var tbody = offersTable.querySelector('tbody');
+            var tbody = table.querySelector('tbody');
             if (!tbody)
             {
                 return;
@@ -1595,11 +1749,26 @@ try {
             });
         }
 
-        function jumpToDirectSalesSummary (row)
+        function tycheMoveOffersToTop (matchFn)
+        {
+            tycheMoveRowsToTop('offers-table', matchFn);
+        }
+
+        function tycheMoveOpportunitiesToTop (matchFn)
+        {
+            tycheMoveRowsToTop('opportunities-table', matchFn);
+        }
+
+        function jumpToDirectSalesSummary (row, event)
         {
             if (!row)
             {
                 return;
+            }
+
+            if (event)
+            {
+                event.stopPropagation();
             }
 
             var customerNo = (row.getAttribute('data-jump-customer-no') || '').trim();
@@ -1625,11 +1794,16 @@ try {
             });
         }
 
-        function jumpToProjectSummary (row)
+        function jumpToProjectSummary (row, event)
         {
             if (!row)
             {
                 return;
+            }
+
+            if (event)
+            {
+                event.stopPropagation();
             }
 
             var projectType = (row.getAttribute('data-jump-project-type') || '').trim().toLowerCase();
@@ -1644,6 +1818,26 @@ try {
 
                 var offerProjectType = (offerRow.getAttribute('data-project-type') || '').trim().toLowerCase();
                 return offerProjectType === projectType;
+            });
+        }
+
+        function jumpToOpportunityCustomerSummary (row, event)
+        {
+            if (!row)
+            {
+                return;
+            }
+
+            if (event)
+            {
+                event.stopPropagation();
+            }
+
+            var customerName = (row.getAttribute('data-jump-opportunity-customer-name') || '').trim().toLowerCase();
+            tycheMoveOpportunitiesToTop(function (opportunityRow)
+            {
+                var rowCustomerName = (opportunityRow.getAttribute('data-customer-name') || '').trim().toLowerCase();
+                return rowCustomerName === customerName;
             });
         }
 
