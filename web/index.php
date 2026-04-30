@@ -43,6 +43,7 @@ $selectedDepartmentCode = '';
 $selectedDepartmentName = '';
 $selectedDepartmentDimensionCode = '';
 $rows = [];
+$opportunityRows = [];
 $directCustomerSummary = [];
 $projectTypeSummary = [];
 $totals = [
@@ -166,6 +167,29 @@ function detect_offer_type(array $quote): string
     return 'Direct Sales';
 }
 
+function detect_opportunity_result_status(array $opp): string
+{
+    $closed = $opp['Closed'] ?? false;
+    $oppStatus = normalize_text((string) ($opp['Status'] ?? ''));
+    $closeCode = normalize_text((string) ($opp['KVT_Close_Opportunity_Code'] ?? ''));
+    $closeDescription = normalize_text((string) ($opp['KVT_Close_Opp_Code_Description'] ?? ''));
+
+    $combined = $oppStatus . ' ' . $closeCode . ' ' . $closeDescription;
+    if (strpos($combined, 'lost') !== false || strpos($combined, 'verlor') !== false || strpos($combined, 'cancel') !== false || strpos($combined, 'annul') !== false) {
+        return 'Verloren';
+    }
+    if (strpos($combined, 'won') !== false || strpos($combined, 'gewonn') !== false || strpos($combined, 'succes') !== false) {
+        return 'Gewonnen';
+    }
+
+    $isClosed = ($closed === true || $closed === 1 || $closed === '1' || $oppStatus === 'closed');
+    if ($isClosed) {
+        return 'Gesloten';
+    }
+
+    return 'Open';
+}
+
 function detect_result_status(array $quote, array $salesDocumentsByQuote, array $opportunitiesByNo): string
 {
     // Primair: LVS_Document_Status bevat een statuscode met patroon NN_LABEL (bijv. 05_WON, 01_OPEN).
@@ -201,23 +225,7 @@ function detect_result_status(array $quote, array $salesDocumentsByQuote, array 
     // Fallback: opportunity status/close code
     $opportunityNo = trim((string) ($quote['Opportunity_No'] ?? ''));
     if ($opportunityNo !== '' && isset($opportunitiesByNo[$opportunityNo])) {
-        $opp = $opportunitiesByNo[$opportunityNo];
-        $closed = $opp['Closed'] ?? false;
-        $oppStatus = normalize_text((string) ($opp['Status'] ?? ''));
-        $closeCode = normalize_text((string) ($opp['KVT_Close_Opportunity_Code'] ?? ''));
-        $closeDescription = normalize_text((string) ($opp['KVT_Close_Opp_Code_Description'] ?? ''));
-
-        $isClosed = ($closed === true || $closed === 1 || $closed === '1' || $oppStatus === 'closed');
-        if ($isClosed) {
-            $combined = $oppStatus . ' ' . $closeCode . ' ' . $closeDescription;
-            if (strpos($combined, 'lost') !== false || strpos($combined, 'verlor') !== false) {
-                return 'Verloren';
-            }
-            if (strpos($combined, 'won') !== false || strpos($combined, 'gewonn') !== false || strpos($combined, 'succes') !== false) {
-                return 'Gewonnen';
-            }
-            return 'Gesloten';
-        }
+        return detect_opportunity_result_status($opportunitiesByNo[$opportunityNo]);
     }
 
     return 'Open';
@@ -336,6 +344,58 @@ try {
             }
         }
 
+        $opportunitiesFilterParts = [
+            "Salesperson_Code eq '" . $escapedSalesperson . "'",
+            'Creation_Date ge ' . $dateFrom,
+            'Creation_Date le ' . $dateTo,
+        ];
+
+        $allOpportunitiesUrl = odata_url($base, ENTITY_SALES_OPPORTUNITIES, [
+            '$select' => 'No,Salesperson_Code,Closed,Status,KVT_Close_Opportunity_Code,KVT_Close_Opp_Code_Description,Creation_Date,Estimated_Closing_Date,Estimated_Value_LCY,Calcd_Current_Value_LCY,Sales_Document_No,LVS_Contact_Company_Name2,Contact_Company_Name,Contact_Name,LVS_Main_Entity_Description,KVT_Sales_Cycle_Stage_Descript',
+            '$filter' => implode(' and ', $opportunitiesFilterParts),
+            '$orderby' => 'Estimated_Closing_Date desc',
+        ]);
+        $allOpportunities = safe_odata_get_all($allOpportunitiesUrl, $auth, ODATA_TTL_SECONDS, 'opportunities');
+
+        foreach ($allOpportunities as $opp) {
+            $oppNo = trim((string) ($opp['No'] ?? ''));
+            if ($oppNo === '') {
+                continue;
+            }
+
+            $customerName = trim((string) ($opp['LVS_Contact_Company_Name2'] ?? ''));
+            if ($customerName === '') {
+                $customerName = trim((string) ($opp['Contact_Company_Name'] ?? ''));
+            }
+            if ($customerName === '') {
+                $customerName = trim((string) ($opp['Contact_Name'] ?? ''));
+            }
+
+            $revenue = as_float($opp['Calcd_Current_Value_LCY'] ?? 0);
+            if ($revenue === 0.0) {
+                $revenue = as_float($opp['Estimated_Value_LCY'] ?? 0);
+            }
+
+            $statusText = trim(implode(' ', array_filter([
+                trim((string) ($opp['Status'] ?? '')),
+                trim((string) ($opp['KVT_Close_Opportunity_Code'] ?? '')),
+                trim((string) ($opp['KVT_Close_Opp_Code_Description'] ?? '')),
+            ])));
+
+            $opportunityRows[] = [
+                'quote_no' => trim((string) ($opp['Sales_Document_No'] ?? '')),
+                'customer_name' => $customerName,
+                'opportunity_no' => $oppNo,
+                'project_type' => trim((string) ($opp['LVS_Main_Entity_Description'] ?? '')),
+                'offer_type' => 'Opportunity',
+                'quote_valid_until' => trim((string) ($opp['Estimated_Closing_Date'] ?? '')),
+                'creation_date' => trim((string) ($opp['Creation_Date'] ?? '')),
+                'result' => detect_opportunity_result_status($opp),
+                'status' => $statusText,
+                'revenue' => $revenue,
+            ];
+        }
+
         $quoteFilterParts = [
             "Salesperson_Code eq '" . $escapedSalesperson . "'",
             'Quote_Valid_Until_Date ge ' . $dateFrom,
@@ -397,7 +457,7 @@ try {
             );
         }
 
-        $opportunities = [];
+        $quoteLinkedOpportunities = [];
         foreach (array_chunk(array_keys($opportunityNos), 20) as $opportunityChunk) {
             $chunkFilter = build_or_filter('No', $opportunityChunk);
             if ($chunkFilter === '') {
@@ -408,8 +468,8 @@ try {
                 '$select' => 'No,Closed,Status,KVT_Close_Opportunity_Code,KVT_Close_Opp_Code_Description,Salesperson_Code',
                 '$filter' => $chunkFilter,
             ]);
-            $opportunities = array_merge(
-                $opportunities,
+            $quoteLinkedOpportunities = array_merge(
+                $quoteLinkedOpportunities,
                 safe_odata_get_all($opportunitiesUrl, $auth, ODATA_TTL_SECONDS, 'opportunities')
             );
         }
@@ -448,7 +508,7 @@ try {
         }
 
         $opportunitiesByNo = [];
-        foreach ($opportunities as $opp) {
+        foreach ($quoteLinkedOpportunities as $opp) {
             $oppNo = trim((string) ($opp['No'] ?? ''));
             if ($oppNo === '') {
                 continue;
@@ -603,7 +663,7 @@ try {
         }
 
         .page {
-            width: min(1550px, 94vw);
+            width: min(1850px, 94vw);
             margin: 2rem auto 3rem;
         }
 
@@ -737,6 +797,45 @@ try {
             position: sticky;
             top: 0;
             background: #f8fbf8;
+        }
+
+                td.status-cell {
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .table-desc-inline {
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            flex-wrap: wrap;
+            margin-top: -0.2rem;
+            margin-bottom: 0.4rem;
+        }
+
+        .table-desc-inline .muted {
+            margin: 0;
+        }
+
+        .status-filter-group {
+            display: inline-flex;
+            gap: 0.35rem;
+            margin: 0;
+            flex-wrap: nowrap;
+            white-space: nowrap;
+            overflow-x: auto;
+        }
+
+        .status-filter {
+            cursor: pointer;
+            user-select: none;
+            transition: opacity 120ms ease, filter 120ms ease;
+        }
+
+        .status-filter:not(.active) {
+            opacity: 0.45;
+            filter: grayscale(1);
         }
 
         .chip {
@@ -1035,9 +1134,84 @@ try {
             </section>
 
             <section class="card section">
+                <h2>Opportunities</h2>
+                <div class="table-desc-inline">
+                    <p class="muted">Gefilterd op accountmanager en aanmaakdatumrange.</p>
+                    <div class="status-filter-group">
+                        <button type="button" class="chip warn status-filter active" data-filter-status="Open" onclick="toggleStatusFilter(this)">Open</button>
+                        <button type="button" class="chip ok status-filter active" data-filter-status="Gewonnen" onclick="toggleStatusFilter(this)">Gewonnen</button>
+                        <button type="button" class="chip bad status-filter active" data-filter-status="Verloren" onclick="toggleStatusFilter(this)">Verloren</button>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table id="opportunities-table">
+                        <thead>
+                            <tr>
+                                <th class="sortable" data-col="0">Offerte</th>
+                                <th class="sortable" data-col="1">Type</th>
+                                <th class="sortable" data-col="2">Klant</th>
+                                <th class="sortable" data-col="3">Opportunity #</th>
+                                <th class="sortable" data-col="4">Resultaat</th>
+                                <th class="sortable" data-col="5">Status</th>
+                                <th class="sortable" data-col="6" data-type="date">Aangemaakt</th>
+                                <th class="sortable" data-col="7" data-type="date">Verwachte sluitdatum</th>
+                                <th class="sortable" data-col="8" data-type="num">Omzet</th>
+                                <th class="sortable" data-col="9">Kosten</th>
+                                <th class="sortable" data-col="10">Marge</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if ($opportunityRows === []): ?>
+                                <tr>
+                                    <td colspan="11" class="muted">Geen opportunities gevonden met deze filters.</td>
+                                </tr>
+                            <?php else: ?>
+                                <?php foreach ($opportunityRows as $row): ?>
+                                    <?php
+                                    $resultClass = 'warn';
+                                    if ($row['result'] === 'Gewonnen') {
+                                        $resultClass = 'ok';
+                                    } elseif ($row['result'] === 'Verloren') {
+                                        $resultClass = 'bad';
+                                    }
+                                    ?>
+                                    <tr class="row-<?php echo h($resultClass); ?>"
+                                        data-opportunity-result="<?php echo h($row['result']); ?>">
+                                        <td><?php echo h($row['quote_no'] !== '' ? $row['quote_no'] : '-'); ?></td>
+                                        <td><span class="chip"><?php echo h($row['offer_type']); ?></span></td>
+                                        <td><?php echo h($row['customer_name'] !== '' ? $row['customer_name'] : '-'); ?></td>
+                                        <td><?php echo h($row['opportunity_no']); ?></td>
+                                        <td><span
+                                                class="chip <?php echo h($resultClass); ?>"><?php echo h($row['result']); ?></span>
+                                        </td>
+                                        <td class="status-cell"><?php echo h($row['status'] !== '' ? $row['status'] : '-'); ?></td>
+                                        <td data-sort="<?php echo h($row['creation_date']); ?>">
+                                            <?php echo h($row['creation_date'] !== '' ? $row['creation_date'] : '-'); ?></td>
+                                        <td data-sort="<?php echo h($row['quote_valid_until']); ?>">
+                                            <?php echo h($row['quote_valid_until'] !== '' ? $row['quote_valid_until'] : '-'); ?>
+                                        </td>
+                                        <td data-sort="<?php echo h((string) $row['revenue']); ?>">EUR
+                                            <?php echo h(q($row['revenue'])); ?></td>
+                                        <td>-</td>
+                                        <td>-</td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="card section">
                 <h2>Offertes</h2>
-                <p class="muted" style="margin-top: -0.2rem; margin-bottom: 0.7rem;">Klik op een regel in de twee
-                    samenvattingen hierboven om die klant of projectsoort bovenaan te zetten.</p>
+                <div class="table-desc-inline">
+                    <p class="muted">Klik op een regel in de twee samenvattingen hierboven om die klant of projectsoort bovenaan te zetten.</p>
+                    <div class="status-filter-group">
+                        <button type="button" class="chip warn status-filter active" data-filter-status="Open" onclick="toggleStatusFilter(this)">Open</button>
+                        <button type="button" class="chip ok status-filter active" data-filter-status="Gewonnen" onclick="toggleStatusFilter(this)">Gewonnen</button>
+                        <button type="button" class="chip bad status-filter active" data-filter-status="Verloren" onclick="toggleStatusFilter(this)">Verloren</button>
+                    </div>
+                </div>
                 <div class="table-wrap">
                     <table id="offers-table">
                         <thead>
@@ -1072,6 +1246,7 @@ try {
                                     $typeClass = $row['offer_type'] === 'Project' ? 'project' : 'direct';
                                     ?>
                                     <tr class="row-<?php echo h($resultClass); ?>"
+                                        data-offer-result="<?php echo h($row['result']); ?>"
                                         data-offer-type="<?php echo h($row['offer_type']); ?>"
                                         data-customer-no="<?php echo h($row['customer_no']); ?>"
                                         data-customer-name="<?php echo h($row['customer_name']); ?>"
@@ -1088,7 +1263,7 @@ try {
                                         <td><span
                                                 class="chip <?php echo h($resultClass); ?>"><?php echo h($row['result']); ?></span>
                                         </td>
-                                        <td><?php echo h(trim($row['status'] . ' ' . $row['document_status'])); ?></td>
+                                        <td class="status-cell"><?php echo h(trim($row['status'] . ' ' . $row['document_status'])); ?></td>
                                         <td data-sort="<?php echo h($row['quote_valid_until']); ?>">
                                             <?php echo h($row['quote_valid_until'] !== '' ? $row['quote_valid_until'] : '-'); ?>
                                         </td>
@@ -1111,9 +1286,221 @@ try {
         <?php endif; ?>
     </main>
 
+        <script>
+        function tycheFindClosestByClass(el, className)
+        {
+            while (el && el !== document)
+            {
+                if (el.classList && el.classList.contains(className))
+                {
+                    return el;
+                }
+                el = el.parentNode;
+            }
+            return null;
+        }
+
+        function tycheApplyStatusFilterById(tableId)
+        {
+            var table = document.getElementById(tableId);
+            if (!table)
+            {
+                return;
+            }
+
+            var card = tycheFindClosestByClass(table, 'card');
+            if (!card)
+            {
+                return;
+            }
+
+            var filterGroup = card.querySelector('.status-filter-group');
+            if (!filterGroup)
+            {
+                return;
+            }
+
+            var activeStatuses = [];
+            var activeButtons = filterGroup.querySelectorAll('.status-filter.active');
+            for (var i = 0; i < activeButtons.length; i++)
+            {
+                activeStatuses.push(activeButtons[i].getAttribute('data-filter-status'));
+            }
+
+            var rows = table.querySelectorAll('tbody tr');
+            for (var r = 0; r < rows.length; r++)
+            {
+                var row = rows[r];
+                var onlyCell = row.cells.length === 1 ? row.cells[0] : null;
+                if (onlyCell && onlyCell.hasAttribute('colspan'))
+                {
+                    row.style.display = '';
+                    continue;
+                }
+
+                var result = '';
+                if (table.id === 'opportunities-table')
+                {
+                    result = row.getAttribute('data-opportunity-result') || '';
+                }
+                else if (table.id === 'offers-table')
+                {
+                    result = row.getAttribute('data-offer-result') || '';
+                }
+
+                if (activeStatuses.length === 0 || activeStatuses.indexOf(result) !== -1)
+                {
+                    row.style.display = '';
+                }
+                else
+                {
+                    row.style.display = 'none';
+                }
+            }
+        }
+
+        function toggleStatusFilter(button)
+        {
+            if (!button)
+            {
+                return;
+            }
+
+            if (button.classList.contains('active'))
+            {
+                button.classList.remove('active');
+            }
+            else
+            {
+                button.classList.add('active');
+            }
+
+            var card = tycheFindClosestByClass(button, 'card');
+            if (!card)
+            {
+                return;
+            }
+
+            var table = card.querySelector('table');
+            if (table && table.id)
+            {
+                tycheApplyStatusFilterById(table.id);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function ()
+        {
+            tycheApplyStatusFilterById('opportunities-table');
+            tycheApplyStatusFilterById('offers-table');
+        });
+    </script>
     <script>
         (function ()
         {
+            function findClosestByClass(el, className)
+            {
+                while (el && el !== document)
+                {
+                    if (el.classList && el.classList.contains(className))
+                    {
+                        return el;
+                    }
+                    el = el.parentNode;
+                }
+                return null;
+            }
+
+            function applyStatusFilterById (tableId)
+            {
+                var table = document.getElementById(tableId);
+                if (!table)
+                {
+                    return;
+                }
+
+                var card = findClosestByClass(table, 'card');
+                if (!card)
+                {
+                    return;
+                }
+
+                var filterGroup = card.querySelector('.status-filter-group');
+                if (!filterGroup)
+                {
+                    return;
+                }
+
+                var activeStatuses = [];
+                var activeButtons = filterGroup.querySelectorAll('.status-filter.active');
+                for (var i = 0; i < activeButtons.length; i++)
+                {
+                    activeStatuses.push(activeButtons[i].getAttribute('data-filter-status'));
+                }
+
+                var rows = table.querySelectorAll('tbody tr');
+                for (var r = 0; r < rows.length; r++)
+                {
+                    var row = rows[r];
+                    var onlyCell = row.cells.length === 1 ? row.cells[0] : null;
+                    if (onlyCell && onlyCell.hasAttribute('colspan'))
+                    {
+                        row.style.display = '';
+                        continue;
+                    }
+
+                    var result = '';
+                    if (table.id === 'opportunities-table')
+                    {
+                        result = row.getAttribute('data-opportunity-result') || '';
+                    }
+                    else if (table.id === 'offers-table')
+                    {
+                        result = row.getAttribute('data-offer-result') || '';
+                    }
+
+                    if (activeStatuses.length === 0 || activeStatuses.indexOf(result) !== -1)
+                    {
+                        row.style.display = '';
+                    }
+                    else
+                    {
+                        row.style.display = 'none';
+                    }
+                }
+            }
+
+            window.toggleStatusFilter = function (button)
+            {
+                if (!button)
+                {
+                    return;
+                }
+
+                if (button.classList.contains('active'))
+                {
+                    button.classList.remove('active');
+                }
+                else
+                {
+                    button.classList.add('active');
+                }
+
+                var card = findClosestByClass(button, 'card');
+                if (!card)
+                {
+                    return;
+                }
+
+                var table = card.querySelector('table');
+                if (table && table.id)
+                {
+                    applyStatusFilterById(table.id);
+                }
+            };
+
+            applyStatusFilterById('opportunities-table');
+            applyStatusFilterById('offers-table');
+
             function animateRowReorder (tbody, orderedRows)
             {
                 var firstTops = new Map();
@@ -1171,7 +1558,7 @@ try {
 
             function moveMatchesToTop (matchFn)
             {
-                var offersTable = document.getElementById('offers-table');
+                var offersTable = document.getElementById('opportunities-table');
                 if (!offersTable)
                 {
                     return;
@@ -1310,7 +1697,6 @@ try {
                 });
             });
         }());
-    </script>
-</body>
+</body >
 
-</html>
+</html >
