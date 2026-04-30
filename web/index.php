@@ -52,6 +52,13 @@ $totals = [
     'cost' => 0.0,
     'profit' => 0.0,
 ];
+$opportunityTotals = [
+    'count' => 0,
+    'revenue' => 0.0,
+    'won_count' => 0,
+    'lost_count' => 0,
+    'open_count' => 0,
+];
 
 /**
  * Functies
@@ -394,6 +401,18 @@ try {
                 'status' => $statusText,
                 'revenue' => $revenue,
             ];
+
+            $opportunityTotals['count']++;
+            $opportunityTotals['revenue'] += $revenue;
+
+            $oppResult = detect_opportunity_result_status($opp);
+            if ($oppResult === 'Gewonnen') {
+                $opportunityTotals['won_count']++;
+            } elseif ($oppResult === 'Verloren') {
+                $opportunityTotals['lost_count']++;
+            } elseif ($oppResult === 'Open') {
+                $opportunityTotals['open_count']++;
+            }
         }
 
         $quoteFilterParts = [
@@ -770,6 +789,27 @@ try {
             font-size: 1.05rem;
         }
 
+        .section-title-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.6rem;
+            margin-bottom: 0.8rem;
+        }
+
+        .section-title-row h2 {
+            margin: 0;
+        }
+
+        .table-toggle-btn {
+            width: auto;
+            min-height: 30px;
+            padding: 0.25rem 0.6rem;
+            font-size: 0.8rem;
+            line-height: 1;
+            border-radius: 999px;
+        }
+
         .table-wrap {
             overflow: auto;
         }
@@ -799,7 +839,7 @@ try {
             background: #f8fbf8;
         }
 
-                td.status-cell {
+        td.status-cell {
             max-width: 200px;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -1096,8 +1136,7 @@ try {
                                     </tr>
                                 <?php else: ?>
                                     <?php foreach ($directCustomerSummary as $summary): ?>
-                                        <tr class="summary-clickable"
-                                            onclick="jumpToDirectSalesSummary(this)"
+                                        <tr class="summary-clickable" onclick="jumpToDirectSalesSummary(this)"
                                             data-jump-customer-no="<?php echo h((string) $summary['customer_no']); ?>"
                                             data-jump-customer-name="<?php echo h((string) $summary['customer_name']); ?>">
                                             <td><?php echo h($summary['customer_name']); ?></td>
@@ -1131,8 +1170,7 @@ try {
                                     </tr>
                                 <?php else: ?>
                                     <?php foreach ($projectTypeSummary as $summary): ?>
-                                        <tr class="summary-clickable"
-                                            onclick="jumpToProjectSummary(this)"
+                                        <tr class="summary-clickable" onclick="jumpToProjectSummary(this)"
                                             data-jump-project-type="<?php echo h((string) $summary['project_type']); ?>">
                                             <td><?php echo h($summary['project_type']); ?></td>
                                             <td><?php echo h((string) $summary['quotes']); ?></td>
@@ -1147,13 +1185,21 @@ try {
             </section>
 
             <section class="card section">
-                <h2>Offertes</h2>
+                <div class="section-title-row">
+                    <h2>Offertes</h2>
+                    <button type="button" class="table-toggle-btn"
+                        onclick="toggleTableSection(this, 'offers-table')">Inklappen</button>
+                </div>
                 <div class="table-desc-inline">
-                    <p class="muted">Klik op een regel in de twee samenvattingen hierboven om die klant of projectsoort bovenaan te zetten.</p>
+                    <p class="muted">Klik op een regel in de twee samenvattingen hierboven om die klant of projectsoort
+                        bovenaan te zetten.</p>
                     <div class="status-filter-group">
-                        <button type="button" class="chip warn status-filter active" data-filter-status="Open" onclick="toggleStatusFilter(this)">Open</button>
-                        <button type="button" class="chip ok status-filter active" data-filter-status="Gewonnen" onclick="toggleStatusFilter(this)">Gewonnen</button>
-                        <button type="button" class="chip bad status-filter active" data-filter-status="Verloren" onclick="toggleStatusFilter(this)">Verloren</button>
+                        <button type="button" class="chip warn status-filter active" data-filter-status="Open"
+                            onclick="toggleStatusFilter(this)">Open</button>
+                        <button type="button" class="chip ok status-filter active" data-filter-status="Gewonnen"
+                            onclick="toggleStatusFilter(this)">Gewonnen</button>
+                        <button type="button" class="chip bad status-filter active" data-filter-status="Verloren"
+                            onclick="toggleStatusFilter(this)">Verloren</button>
                     </div>
                 </div>
                 <div class="table-wrap">
@@ -1207,7 +1253,8 @@ try {
                                         <td><span
                                                 class="chip <?php echo h($resultClass); ?>"><?php echo h($row['result']); ?></span>
                                         </td>
-                                        <td class="status-cell"><?php echo h(trim($row['status'] . ' ' . $row['document_status'])); ?></td>
+                                        <td class="status-cell">
+                                            <?php echo h(trim($row['status'] . ' ' . $row['document_status'])); ?></td>
                                         <td data-sort="<?php echo h($row['quote_valid_until']); ?>">
                                             <?php echo h($row['quote_valid_until'] !== '' ? $row['quote_valid_until'] : '-'); ?>
                                         </td>
@@ -1228,37 +1275,66 @@ try {
                 </div>
             </section>
 
+            <section class="stats" style="margin-top: 1rem; margin-bottom: 1rem;">
+                <?php
+                $closedDecidedTotal = $opportunityTotals['won_count'] + $opportunityTotals['lost_count'];
+                $wonPct = $closedDecidedTotal > 0 ? (100.0 * $opportunityTotals['won_count'] / $closedDecidedTotal) : null;
+                ?>
+                <article class="card stat">
+                    <p class="k">Aantal kansen</p>
+                    <p class="v"><?php echo h((string) $opportunityTotals['count']); ?></p>
+                </article>
+                <article class="card stat">
+                    <p class="k">Omzet</p>
+                    <p class="v">EUR <?php echo h(q($opportunityTotals['revenue'])); ?></p>
+                </article>
+                <article class="card stat">
+                    <p class="k">% Gewonnen (vs verloren)</p>
+                    <p class="v"><?php echo $wonPct === null ? '-' : h(number_format($wonPct, 1, ',', '.')) . '%'; ?></p>
+                </article>
+                <article class="card stat">
+                    <p class="k">Aantal openstaand</p>
+                    <p class="v"><?php echo h((string) $opportunityTotals['open_count']); ?></p>
+                </article>
+            </section>
+
             <section class="card section">
-                <h2>Opportunities</h2>
+                <div class="section-title-row">
+                    <h2>Opportunities</h2>
+                    <button type="button" class="table-toggle-btn"
+                        onclick="toggleTableSection(this, 'opportunities-table')">Inklappen</button>
+                </div>
                 <div class="table-desc-inline">
                     <p class="muted">Gefilterd op accountmanager en aanmaakdatumrange.</p>
                     <div class="status-filter-group">
-                        <button type="button" class="chip warn status-filter active" data-filter-status="Open" onclick="toggleStatusFilter(this)">Open</button>
-                        <button type="button" class="chip ok status-filter active" data-filter-status="Gewonnen" onclick="toggleStatusFilter(this)">Gewonnen</button>
-                        <button type="button" class="chip bad status-filter active" data-filter-status="Verloren" onclick="toggleStatusFilter(this)">Verloren</button>
+                        <button type="button" class="chip warn status-filter active" data-filter-status="Open"
+                            onclick="toggleStatusFilter(this)">Open</button>
+                        <button type="button" class="chip ok status-filter active" data-filter-status="Gewonnen"
+                            onclick="toggleStatusFilter(this)">Gewonnen</button>
+                        <button type="button" class="chip bad status-filter active" data-filter-status="Verloren"
+                            onclick="toggleStatusFilter(this)">Verloren</button>
                     </div>
                 </div>
                 <div class="table-wrap">
                     <table id="opportunities-table">
                         <thead>
                             <tr>
-                                <th class="sortable" data-col="0">Offerte</th>
+                                <th class="sortable" data-col="0">Opportunity #</th>
                                 <th class="sortable" data-col="1">Type</th>
                                 <th class="sortable" data-col="2">Klant</th>
-                                <th class="sortable" data-col="3">Opportunity #</th>
-                                <th class="sortable" data-col="4">Resultaat</th>
-                                <th class="sortable" data-col="5">Status</th>
-                                <th class="sortable" data-col="6" data-type="date">Aangemaakt</th>
-                                <th class="sortable" data-col="7" data-type="date">Verwachte sluitdatum</th>
-                                <th class="sortable" data-col="8" data-type="num">Omzet</th>
-                                <th class="sortable" data-col="9">Kosten</th>
-                                <th class="sortable" data-col="10">Marge</th>
+                                <th class="sortable" data-col="3">Resultaat</th>
+                                <th class="sortable" data-col="4">Status</th>
+                                <th class="sortable" data-col="5" data-type="date">Aangemaakt</th>
+                                <th class="sortable" data-col="6" data-type="date">Verwachte sluitdatum</th>
+                                <th class="sortable" data-col="7" data-type="num">Omzet</th>
+                                <th class="sortable" data-col="8" data-type="num">Kosten</th>
+                                <th class="sortable" data-col="9" data-type="num">Marge</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php if ($opportunityRows === []): ?>
                                 <tr>
-                                    <td colspan="11" class="muted">Geen opportunities gevonden met deze filters.</td>
+                                    <td colspan="10" class="muted">Geen opportunities gevonden met deze filters.</td>
                                 </tr>
                             <?php else: ?>
                                 <?php foreach ($opportunityRows as $row): ?>
@@ -1272,21 +1348,22 @@ try {
                                     ?>
                                     <tr class="row-<?php echo h($resultClass); ?>"
                                         data-opportunity-result="<?php echo h($row['result']); ?>">
-                                        <td><?php echo h($row['quote_no'] !== '' ? $row['quote_no'] : '-'); ?></td>
+                                        <td><?php echo h($row['opportunity_no']); ?></td>
                                         <td><span class="chip"><?php echo h($row['offer_type']); ?></span></td>
                                         <td><?php echo h($row['customer_name'] !== '' ? $row['customer_name'] : '-'); ?></td>
-                                        <td><?php echo h($row['opportunity_no']); ?></td>
                                         <td><span
                                                 class="chip <?php echo h($resultClass); ?>"><?php echo h($row['result']); ?></span>
                                         </td>
                                         <td class="status-cell"><?php echo h($row['status'] !== '' ? $row['status'] : '-'); ?></td>
                                         <td data-sort="<?php echo h($row['creation_date']); ?>">
-                                            <?php echo h($row['creation_date'] !== '' ? $row['creation_date'] : '-'); ?></td>
+                                            <?php echo h($row['creation_date'] !== '' ? $row['creation_date'] : '-'); ?>
+                                        </td>
                                         <td data-sort="<?php echo h($row['quote_valid_until']); ?>">
                                             <?php echo h($row['quote_valid_until'] !== '' ? $row['quote_valid_until'] : '-'); ?>
                                         </td>
                                         <td data-sort="<?php echo h((string) $row['revenue']); ?>">EUR
-                                            <?php echo h(q($row['revenue'])); ?></td>
+                                            <?php echo h(q($row['revenue'])); ?>
+                                        </td>
                                         <td>-</td>
                                         <td>-</td>
                                     </tr>
@@ -1297,12 +1374,12 @@ try {
                 </div>
             </section>
 
-            
+
         <?php endif; ?>
     </main>
 
-        <script>
-        function tycheFindClosestByClass(el, className)
+    <script>
+        function tycheFindClosestByClass (el, className)
         {
             while (el && el !== document)
             {
@@ -1315,7 +1392,7 @@ try {
             return null;
         }
 
-        function tycheApplyStatusFilterById(tableId)
+        function tycheApplyStatusFilterById (tableId)
         {
             var table = document.getElementById(tableId);
             if (!table)
@@ -1374,7 +1451,7 @@ try {
             }
         }
 
-        function toggleStatusFilter(button)
+        function toggleStatusFilter (button)
         {
             if (!button)
             {
@@ -1403,7 +1480,26 @@ try {
             }
         }
 
-        function tycheMoveOffersToTop(matchFn)
+        function toggleTableSection (button, tableId)
+        {
+            var table = document.getElementById(tableId);
+            if (!table || !button)
+            {
+                return;
+            }
+
+            var wrap = table.parentNode;
+            if (!wrap || !wrap.classList || !wrap.classList.contains('table-wrap'))
+            {
+                return;
+            }
+
+            var isHidden = wrap.style.display === 'none';
+            wrap.style.display = isHidden ? '' : 'none';
+            button.textContent = isHidden ? 'Inklappen' : 'Uitklappen';
+        }
+
+        function tycheMoveOffersToTop (matchFn)
         {
             var offersTable = document.getElementById('offers-table');
             if (!offersTable)
@@ -1499,7 +1595,7 @@ try {
             });
         }
 
-        function jumpToDirectSalesSummary(row)
+        function jumpToDirectSalesSummary (row)
         {
             if (!row)
             {
@@ -1529,7 +1625,7 @@ try {
             });
         }
 
-        function jumpToProjectSummary(row)
+        function jumpToProjectSummary (row)
         {
             if (!row)
             {
@@ -1560,7 +1656,7 @@ try {
     <script>
         (function ()
         {
-            function findClosestByClass(el, className)
+            function findClosestByClass (el, className)
             {
                 while (el && el !== document)
                 {
