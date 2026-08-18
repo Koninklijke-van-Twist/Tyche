@@ -6,3 +6,6 @@ web/cache/
 web/feestdagen/
 
 BC Metadata.txt
+
+web/analytics/analytics.sqlite
+web/analytics/analytics.sqlite-*

@@ -53,6 +53,8 @@ jobs:
             --exclude-glob feestdagen/** \
             --exclude-glob .htpasswd \
             --exclude-glob *.json \
+            --exclude-glob analytics/*.sqlite \
+            --exclude-glob analytics/*.sqlite-* \
             --exclude-glob auth.php \
             ./web .
 
