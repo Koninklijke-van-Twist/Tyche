@@ -155,12 +155,25 @@ function analytics_migrate_visited_at_to_integer(PDO $pdo): void
 
 function analytics_record_visit(string $email): void
 {
-    $statement = analytics_pdo()->prepare(
+    $email = strtolower(trim($email));
+    $pdo = analytics_pdo();
+    $recent = $pdo->prepare(
+        'SELECT 1 FROM visits WHERE user_email = :user_email AND visited_at >= :since LIMIT 1'
+    );
+    $recent->execute([
+        ':user_email' => $email,
+        ':since' => time() - 60,
+    ]);
+    if ($recent->fetchColumn()) {
+        return;
+    }
+
+    $statement = $pdo->prepare(
         'INSERT INTO visits (visited_at, user_email) VALUES (:visited_at, :user_email)'
     );
     $statement->execute([
         ':visited_at' => time(),
-        ':user_email' => strtolower(trim($email)),
+        ':user_email' => $email,
     ]);
 }
 
