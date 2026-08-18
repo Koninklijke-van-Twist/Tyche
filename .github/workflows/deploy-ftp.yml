@@ -58,5 +58,8 @@ jobs:
             --exclude-glob auth.php \
             ./web .
 
+          set cmd:fail-exit false
+          chmod 777 analytics
+
           bye
           EOF

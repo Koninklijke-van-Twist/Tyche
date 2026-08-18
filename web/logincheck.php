@@ -47,6 +47,8 @@ if (!is_trusted_requester()) {
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_CONNECTTIMEOUT => 1,
                 CURLOPT_TIMEOUT => 1,
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => 0,
                 CURLOPT_HTTPHEADER => ['X-API-Key: ' . $analyticsApiKey],
             ]);
             curl_exec($analyticsCurl);
