@@ -273,6 +273,16 @@ $dateFrom = $dateFromObj->format('Y-m-d');
 $dateTo = $dateToObj->format('Y-m-d');
 
 try {
+    if (odata_mimir_enabled()) {
+        // Mímir-modus: BC-credentials zijn niet nodig. $base blijft de company-OData-root.
+        if (!isset($auth) || !is_array($auth)) {
+            $auth = [];
+        }
+        if (!isset($base) || !is_string($base)) {
+            $base = '';
+        }
+    }
+
     $salespersonUrl = odata_url($base, ENTITY_SALESPERSON, [
         '$select' => 'Code,Name',
     ]);
