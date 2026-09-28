@@ -316,7 +316,7 @@ try {
 
         $salespersonCardRows = safe_odata_get_all(
             odata_url($base, ENTITY_SALESPERSON_CARD, [
-                '$select' => 'Code,Global_Dimension_1_Code,Global_Dimension_2_Code',
+                '$select' => 'Global_Dimension_1_Code,Global_Dimension_2_Code',
                 '$filter' => "Code eq '" . $escapedSalesperson . "'",
                 '$top' => '1',
             ]),
@@ -346,7 +346,7 @@ try {
 
             $dimensionRows = safe_odata_get_all(
                 odata_url($base, ENTITY_DIMENSION_VALUES, [
-                    '$select' => 'Dimension_Code,Code,Name',
+                    '$select' => 'Dimension_Code,Name',
                     '$filter' => implode(' and ', $dimensionFilterParts),
                     '$top' => '1',
                 ]),
@@ -358,7 +358,7 @@ try {
             if ($dimensionRows === [] && $selectedDepartmentDimensionCode !== '') {
                 $dimensionRows = safe_odata_get_all(
                     odata_url($base, ENTITY_DIMENSION_VALUES, [
-                        '$select' => 'Dimension_Code,Code,Name',
+                        '$select' => 'Name',
                         '$filter' => "Code eq '" . odata_quote_string_value($selectedDepartmentCode) . "'",
                         '$top' => '1',
                     ]),
@@ -383,7 +383,7 @@ try {
         ];
 
         $allOpportunitiesUrl = odata_url($base, ENTITY_SALES_OPPORTUNITIES, [
-            '$select' => 'No,Salesperson_Code,Closed,Status,KVT_Close_Opportunity_Code,KVT_Close_Opp_Code_Description,Creation_Date,Estimated_Closing_Date,Estimated_Value_LCY,Calcd_Current_Value_LCY,Sales_Document_No,LVS_Contact_Company_Name2,Contact_Company_Name,Contact_Name,LVS_Main_Entity_Description,KVT_Sales_Cycle_Stage_Descript',
+            '$select' => 'No,Closed,Status,KVT_Close_Opportunity_Code,KVT_Close_Opp_Code_Description,Creation_Date,Estimated_Closing_Date,Estimated_Value_LCY,Calcd_Current_Value_LCY,LVS_Contact_Company_Name2,Contact_Company_Name,Contact_Name',
             '$filter' => implode(' and ', $opportunitiesFilterParts),
             '$orderby' => 'Estimated_Closing_Date desc',
         ]);
@@ -458,7 +458,7 @@ try {
         ];
 
         $quotesUrl = odata_url($base, ENTITY_SALES_QUOTES, [
-            '$select' => 'No,Sell_to_Customer_No,Sell_to_Customer_Name,Salesperson_Code,Opportunity_No,Status,LVS_Document_Status,LVS_Job_Type,Amount,Quote_Valid_Until_Date',
+            '$select' => 'No,Sell_to_Customer_No,Sell_to_Customer_Name,Opportunity_No,Status,LVS_Document_Status,LVS_Job_Type,Amount,Quote_Valid_Until_Date',
             '$filter' => implode(' and ', $quoteFilterParts),
             '$orderby' => 'Quote_Valid_Until_Date desc',
         ]);
@@ -486,7 +486,7 @@ try {
             }
 
             $linesUrl = odata_url($base, ENTITY_SALES_QUOTE_LINES, [
-                '$select' => 'Document_No,Document_Type,Line_Amount,Total_Amount_Excl_VAT,KVT_Total_Costs_Line_LCY',
+                '$select' => 'Document_No,Line_Amount,Total_Amount_Excl_VAT,KVT_Total_Costs_Line_LCY',
                 '$filter' => "Document_Type eq 'Quote' and " . $chunkFilter,
             ]);
             $allQuoteLines = array_merge(
@@ -503,7 +503,7 @@ try {
             }
 
             $documentsUrl = odata_url($base, ENTITY_SALES_DOCUMENTS, [
-                '$select' => 'quoteNumber,quoteAccepted,quoteAcceptedDate,salespersonCode,documentType,opportunityNumber',
+                '$select' => 'quoteNumber,quoteAccepted',
                 '$filter' => $chunkFilter,
             ]);
             $salesDocuments = array_merge(
@@ -520,7 +520,7 @@ try {
             }
 
             $opportunitiesUrl = odata_url($base, ENTITY_SALES_OPPORTUNITIES, [
-                '$select' => 'No,Closed,Status,KVT_Close_Opportunity_Code,KVT_Close_Opp_Code_Description,Salesperson_Code',
+                '$select' => 'No,Closed,Status,KVT_Close_Opportunity_Code,KVT_Close_Opp_Code_Description',
                 '$filter' => $chunkFilter,
             ]);
             $quoteLinkedOpportunities = array_merge(
