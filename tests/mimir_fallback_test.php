@@ -101,8 +101,8 @@ $expectedEntityUrl = "https://bc.example:7148/Production/ODataV4/Company('Konink
 if (!is_array($entityCall) || $entityCall['url'] !== $expectedEntityUrl || $entityCall['user'] !== 'bcuser' || $entityCall['ttl'] !== 120) {
     fail('entity-fallback URL/auth/ttl klopt niet: ' . json_encode($entityCall));
 }
-if (fallback_count() < 2) {
-    fail('elke fallback moet gelogd worden, log=' . fallback_log());
+if (fallback_count() !== 1) {
+    fail('alleen de eerste Mímir-fout mag gelogd worden, log=' . fallback_log());
 }
 $log = fallback_log();
 if (strpos($log, 'mimir_test_key_should_not_leak') !== false || strpos($log, 'bc-secret') !== false) {
@@ -232,6 +232,153 @@ $listAuthRows = odata_mimir_query('KVT Gas', 'AppResource', ['$select' => 'No'],
 $listAuthCall = $calls[$beforeListAuth] ?? null;
 if (($listAuthRows[0]['No'] ?? '') !== 'WO-1' || !is_array($listAuthCall) || $listAuthCall['user'] !== 'listuser') {
     fail('fallback moet $auth_list gebruiken als $auth leeg is: ' . json_encode($listAuthCall));
+}
+
+odata_mimir_circuit_reset();
+$mimirApi = 'mimir_test_key_should_not_leak';
+$mimirBase = 'http://127.0.0.1:9';
+$baseUrl = 'https://bc.example:7148/';
+$environment = 'Production';
+$base = '';
+$auth_list = [
+    'Production' => ['mode' => 'basic', 'user' => 'bcuser', 'pass' => 'bc-secret'],
+    'Sandbox' => ['mode' => 'basic', 'user' => 'sandbox-user', 'pass' => 'sandbox-secret'],
+    'Sand Box' => ['mode' => 'basic', 'user' => 'space-user', 'pass' => 'space-secret'],
+];
+$auth = $auth_list['Production'];
+$GLOBALS['demeter_company_environment_map'] = [
+    'Hunter van Twist' => 'Sandbox',
+    'KVT Gas' => 'Production',
+];
+$beforeCompanyEnv = count($calls);
+$companyEnvRows = odata_mimir_query('Hunter van Twist', 'AppResource', ['$select' => 'No'], 30);
+if (($companyEnvRows[0]['No'] ?? '') !== 'WO-1') {
+    fail('company-environment fallback gaf geen rijen');
+}
+$companyEnvCall = $calls[$beforeCompanyEnv] ?? null;
+if (!is_array($companyEnvCall)
+    || strpos((string) ($companyEnvCall['url'] ?? ''), "https://bc.example:7148/Sandbox/ODataV4/Company('Hunter%20van%20Twist')/AppResource?") !== 0
+    || ($companyEnvCall['user'] ?? '') !== 'sandbox-user'
+) {
+    fail('query gebruikte niet het environment en de auth van het bedrijf: ' . json_encode($companyEnvCall));
+}
+
+odata_mimir_circuit_reset();
+$beforeUrlEnv = count($calls);
+$urlEnvRows = odata_get_all(
+    "https://mimir.invalid/Sandbox/ODataV4/Company('Hunter%20van%20Twist')/AppWerkorders?\$select=No",
+    $auth,
+    12
+);
+if (($urlEnvRows[0]['No'] ?? '') !== 'WO-1') {
+    fail('URL-environment fallback gaf geen rijen');
+}
+$urlEnvCall = $calls[$beforeUrlEnv] ?? null;
+if (!is_array($urlEnvCall)
+    || ($urlEnvCall['url'] ?? '') !== "https://bc.example:7148/Sandbox/ODataV4/Company('Hunter%20van%20Twist')/AppWerkorders?\$select=No"
+    || ($urlEnvCall['user'] ?? '') !== 'sandbox-user'
+) {
+    fail('URL-segment werd vervangen door het primaire environment: ' . json_encode($urlEnvCall));
+}
+
+odata_mimir_circuit_reset();
+$beforeMapped = count($calls);
+$mappedRows = odata_get_all(
+    "https://mimir.invalid/mimir/ODataV4/Company('Hunter%20van%20Twist')/AppWerkorders?\$select=No",
+    $auth,
+    12
+);
+if (($mappedRows[0]['No'] ?? '') !== 'WO-1') {
+    fail('company-map fallback gaf geen rijen');
+}
+$mappedCall = $calls[$beforeMapped] ?? null;
+if (!is_array($mappedCall)
+    || strpos((string) ($mappedCall['url'] ?? ''), 'https://bc.example:7148/Sandbox/ODataV4/') !== 0
+    || ($mappedCall['user'] ?? '') !== 'sandbox-user'
+) {
+    fail('placeholder-environment negeerde de company-map: ' . json_encode($mappedCall));
+}
+
+$encodedUrl = odata_bc_url_from_odata_url("https://mimir.invalid/Sand%20Box/ODataV4/Company('X')/T?\$select=No");
+if ($encodedUrl !== "https://bc.example:7148/Sand%20Box/ODataV4/Company('X')/T?\$select=No" || strpos($encodedUrl, '%2520') !== false) {
+    fail('environment werd niet precies één keer geëncodeerd: ' . $encodedUrl);
+}
+
+$savedEnvironment = $environment;
+$environment = 'mimir';
+$cacheKey = build_cache_key(
+    "https://bc.example:7148/Sandbox/ODataV4/Company('Hunter%20van%20Twist')/AppResource",
+    $auth_list['Sandbox']
+);
+$environment = $savedEnvironment;
+if (substr($cacheKey, -strlen('|sandbox-user|Sandbox')) !== '|sandbox-user|Sandbox') {
+    fail('cache-key moet het BC-environment uit de URL gebruiken, kreeg: ' . $cacheKey);
+}
+
+odata_mimir_circuit_reset();
+$loggedBeforeLocal = fallback_count();
+$callsBeforeLocal = count($calls);
+$localError = null;
+try {
+    odata_get_all('https://example.test/not-an-odata-url', $auth, 10);
+    fail('een onvertaalbare URL moet een fout geven');
+} catch (Throwable $exception) {
+    $localError = $exception;
+}
+if (!$localError instanceof Throwable || strpos($localError->getMessage(), 'kon niet worden vertaald') === false) {
+    fail('verwacht een lokale vertaalfout, kreeg: ' . ($localError instanceof Throwable ? $localError->getMessage() : 'geen'));
+}
+if (odata_mimir_circuit_open()) {
+    fail('een lokale fout mag het circuit niet openen');
+}
+if (count($calls) !== $callsBeforeLocal || fallback_count() !== $loggedBeforeLocal) {
+    fail('een lokale fout mag niet terugvallen op BC');
+}
+if (strpos(fallback_log(), 'sandbox-secret') !== false || strpos(fallback_log(), 'space-secret') !== false) {
+    fail('log bevat een geheim na environment-fallback');
+}
+
+$tmpAuth = sys_get_temp_dir() . '/tyche-auth-fallback-' . getmypid() . '.php';
+file_put_contents($tmpAuth, <<<'PHP'
+<?php
+$baseUrl = 'https://loaded-bc.example:7148/';
+$environment = 'LoadedEnv';
+$auth_list = [
+    'LoadedEnv' => ['mode' => 'basic', 'user' => 'loaded-user', 'pass' => 'loaded-secret'],
+];
+$auth = $auth_list['LoadedEnv'];
+$base = "https://loaded-bc.example:7148/LoadedEnv/ODataV4/Company('Loaded')";
+PHP);
+$baseUrl = 'https://mimir.invalid/';
+$environment = 'mimir';
+$auth = [];
+$auth_list = [];
+$base = "https://keep.example/ODataV4/Company('Keep')";
+unset($GLOBALS['TYCHE_AUTH_PHP_INCLUDED']);
+$GLOBALS['TYCHE_AUTH_PHP_PATH'] = $tmpAuth;
+odata_bc_load_auth_globals();
+$loadedBase = odata_bc_base_url();
+$loadedUser = (string) ($GLOBALS['auth_list']['LoadedEnv']['user'] ?? '');
+$loadedEnv = isset($GLOBALS['environment']) ? (string) $GLOBALS['environment'] : '';
+$keptBase = isset($GLOBALS['base']) ? (string) $GLOBALS['base'] : '';
+require_once $tmpAuth;
+$baseAfterSecondInclude = odata_bc_base_url();
+@unlink($tmpAuth);
+unset($GLOBALS['TYCHE_AUTH_PHP_PATH']);
+if ($loadedBase !== 'https://loaded-bc.example:7148/') {
+    fail('auth.php-variabelen bleven buiten $GLOBALS, baseUrl=' . var_export($loadedBase, true));
+}
+if ($loadedUser !== 'loaded-user' || $loadedEnv !== 'LoadedEnv') {
+    fail('auth_list/environment uit auth.php zijn niet globaal: user=' . $loadedUser . ' env=' . var_export($loadedEnv, true));
+}
+if ($keptBase !== "https://keep.example/ODataV4/Company('Keep')") {
+    fail('een al gezette $base werd overschreven: ' . $keptBase);
+}
+if ($baseAfterSecondInclude !== 'https://loaded-bc.example:7148/') {
+    fail('tweede require_once maakte de BC-globals weer leeg');
+}
+if (strpos(fallback_log(), 'loaded-secret') !== false) {
+    fail('log bevat het wachtwoord uit auth.php');
 }
 
 echo "OK\n";
