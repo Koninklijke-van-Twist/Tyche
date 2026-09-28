@@ -274,13 +274,9 @@ $dateTo = $dateToObj->format('Y-m-d');
 
 try {
     if (odata_mimir_enabled()) {
-        // Mímir-modus: BC-credentials zijn niet nodig. $base blijft de company-OData-root.
-        if (!isset($auth) || !is_array($auth)) {
-            $auth = [];
-        }
-        if (!isset($base) || !is_string($base)) {
-            $base = '';
-        }
+        // Mímir eerst. BC-credentials ($base, $auth / $auth_list, $environment) blijven
+        // beschikbaar voor de directe fallback als Mímir uitvalt.
+        odata_ensure_bc_credentials();
     }
 
     $salespersonUrl = odata_url($base, ENTITY_SALESPERSON, [
