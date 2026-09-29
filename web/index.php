@@ -383,7 +383,7 @@ try {
         ];
 
         $allOpportunitiesUrl = odata_url($base, ENTITY_SALES_OPPORTUNITIES, [
-            '$select' => 'No,Closed,Status,KVT_Close_Opportunity_Code,KVT_Close_Opp_Code_Description,Creation_Date,Estimated_Closing_Date,Estimated_Value_LCY,Calcd_Current_Value_LCY,LVS_Contact_Company_Name2,Contact_Company_Name,Contact_Name',
+            '$select' => 'No,Closed,Status,KVT_Close_Opportunity_Code,KVT_Close_Opp_Code_Description,Creation_Date,Estimated_Closing_Date,Estimated_Value_LCY,Calcd_Current_Value_LCY,Sales_Document_No,LVS_Contact_Company_Name2,Contact_Company_Name,Contact_Name,LVS_Main_Entity_Description',
             '$filter' => implode(' and ', $opportunitiesFilterParts),
             '$orderby' => 'Estimated_Closing_Date desc',
         ]);
@@ -458,7 +458,7 @@ try {
         ];
 
         $quotesUrl = odata_url($base, ENTITY_SALES_QUOTES, [
-            '$select' => 'No,Sell_to_Customer_No,Sell_to_Customer_Name,Opportunity_No,Status,LVS_Document_Status,LVS_Job_Type,Amount,Quote_Valid_Until_Date',
+            '$select' => 'No,Sell_to_Customer_No,Sell_to_Customer_Name,Salesperson_Code,Opportunity_No,Status,LVS_Document_Status,LVS_Job_Type,Amount,Quote_Valid_Until_Date',
             '$filter' => implode(' and ', $quoteFilterParts),
             '$orderby' => 'Quote_Valid_Until_Date desc',
         ]);
